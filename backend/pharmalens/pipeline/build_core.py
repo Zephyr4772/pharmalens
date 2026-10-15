@@ -86,6 +86,12 @@ def to_float(v):
 RX_MARK = "Prescription Required"
 TAIL_MARKS = ("not available", "ADD")
 MRP_RE = re.compile(r"MRP₹\s*([\d,]+(?:\.\d+)?)")
+FORM_WORDS = sorted("""Injection Syrup Dry Oral Suspension Cream Eye Ear Nasal Drop Drops Tablet Tablets Capsule Capsules
+    Powder Gel Infusion Ointment Soap Lotion Solution Spray Shampoo Inhaler Respules Sachet Sachets Granules Mouth Wash
+    Face Rotacap Rotacaps Emulsion Paste Toothpaste Jelly Liquid Kit Patch Pen Cartridge Lozenges Suppository Pessary
+    Vial Ampoule Serum Oil Tonic Linctus Elixir Softgel Softgels Chewable Effervescent Gargle Foam Dusting Prefilled
+    Syringe Film Expectorant Gum Transcaps Redicaps Inhalation Topical Vaginal Rectal Sugar Free Drink Bar""".split(), key=len, reverse=True)
+FORM_PREFIX = re.compile(r"^(?:(?:" + "|".join(FORM_WORDS) + r")(?:/| )?)+")
 BOUNDARY_RE = re.compile(r"(?<=[a-z\.\)])(?=[A-Z])")
 
 
@@ -121,10 +127,15 @@ def parse_onemg_2025(known_mfrs: list[str]) -> dict[str, dict]:
                     in_stock = t == "ADD"
                     rest = rest[: -len(t)]
                     break
-            # pack = leading run without capitals ("strip of 10 tablets")
+            # pack = leading run without capitals ("strip of 10 tablets"), plus a trailing
+            # capitalised form word when the pack ends in a count ("bottle of 100 ml Syrup")
             pm = re.match(r"^([^A-Z]*?)(?=[A-Z]|$)", rest)
-            pack = pm.group(1).strip() if pm else ""
-            rest = rest[len(pm.group(1)):] if pm else rest
+            pack = pm.group(1) if pm else ""
+            rest = rest[len(pack):]
+            fm = FORM_PREFIX.match(rest)
+            if fm and re.search(r"(\d|ml|gm|g|of)\s*$", pack):
+                pack, rest = pack + fm.group(0), rest[fm.end():]
+            pack = pack.strip()
             mfr, comp = None, None
             for cand in by_prefix.get(rest[:PFX], []) + short:
                 if rest.startswith(cand):
@@ -160,6 +171,13 @@ def build():
     log("loading master dataset")
     con.execute(f"CREATE OR REPLACE TEMP TABLE m AS SELECT * FROM read_csv_auto('{M}medicines.csv', sample_size=-1)")
     con.execute(f"CREATE OR REPLACE TEMP TABLE mm AS SELECT * FROM read_csv_auto('{M}medicine_molecules.csv', sample_size=-1)")
+    con.execute(f"""CREATE OR REPLACE TEMP TABLE mf AS
+        SELECT medicine_id,
+               coalesce(manufacturer, manufacturer_apollo, marketer_ndj, manufacturer_1mg, manufacturer_mh, company_ru, marketer) AS mfr,
+               manufacturer_netmeds AS indication_group
+        FROM '{M}medicines_full.parquet'""")
+    con.execute("UPDATE m SET manufacturer = mf.mfr FROM mf WHERE mf.medicine_id = m.medicine_id")
+    indication = dict(con.execute("SELECT medicine_id, indication_group FROM mf WHERE indication_group IS NOT NULL").fetchall())
     master_rows = con.execute(
         """SELECT medicine_id, medicine_name, manufacturer, dosage_form, pack_size, price_inr,
                   is_discontinued, prescription, composition, therapeutic_class, action_class,
@@ -197,6 +215,7 @@ def build():
             "therapeutic_class": tclass, "action_class": aclass, "chemical_class": cclass,
             "habit_forming": to_bool(habit), "uses": uses, "side_effects": se,
             "image_url": img, "source_count": scount or 0, "sources": "master",
+            "indication_group": indication.get(mid),
         }
         if o:
             matched_2025 += 1
@@ -391,7 +410,7 @@ def build():
     cols = ["id", "src_id", "name", "name_norm", "company_id", "manufacturer_raw", "dosage_form", "pack_size",
             "pack_qty", "mrp", "mrp_asof", "mrp_legacy", "unit_price", "composition", "combo_id", "molecule_count",
             "rx_required", "is_discontinued", "in_stock", "therapeutic_class", "action_class", "chemical_class",
-            "habit_forming", "uses", "side_effects", "image_url", "source_count", "sources"]
+            "habit_forming", "uses", "side_effects", "image_url", "source_count", "sources", "indication_group"]
     import pandas as pd
     df = pd.DataFrame([{c: p.get(c) for c in cols} for p in products], columns=cols)
     con.register("df_products", df)

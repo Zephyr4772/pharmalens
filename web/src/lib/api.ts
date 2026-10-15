@@ -1,66 +1,73 @@
-async function J<T>(r: Response): Promise<T> {
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-  return (await r.json()) as T;
+// Thin typed fetch layer over /api/v1. Rows are loosely typed: the API is the schema.
+export type Row = Record<string, any>;
+export interface Paged<T = Row> {
+  meta: { total: number; page: number; limit: number; pages: number };
+  data: T[];
+  [k: string]: any;
 }
 
-const q = (params: Record<string, unknown>) => {
+const BASE = "/api/v1";
+
+export function qs(params: Record<string, unknown> = {}) {
   const u = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null && v !== "" && v !== false) u.set(k, String(v));
+    if (v !== undefined && v !== null && v !== "" && !(typeof v === "number" && Number.isNaN(v))) u.set(k, String(v));
   }
   const s = u.toString();
   return s ? `?${s}` : "";
-};
+}
 
-export const api = {
-  overview: () => fetch("/api/v1/markets/overview").then(J<import("./types").Overview>),
-  arbitrage: (limit = 15) =>
-    fetch(`/api/v1/markets/arbitrage${q({ limit })}`).then(J<{ data: import("./types").ArbitrageRow[] }>),
-  premium: (limit = 12) =>
-    fetch(`/api/v1/markets/premium${q({ limit })}`).then(J<{ data: Record<string, unknown>[] }>),
-  build: () => fetch("/api/v1/meta/build").then(J<import("./types").BuildInfo>),
-  healthz: () =>
-    fetch("/api/v1/healthz").then(J<{ ok: boolean; probe_ms: number }>),
-  search: (query: string, limit = 14) =>
-    fetch(
-      `/api/v1/search${q({ q: query, limit })}`
-    ).then(J<{ results: import("./types").SearchResult[]; took_ms: number }>),
-  drugs: (f: Record<string, unknown>) =>
-    fetch(`/api/v1/drugs${q(f)}`).then(
-      J<{ meta: { total: number; page: number; pages: number }; took_ms: number; data: import("./types").DrugListItem[] }>
-    ),
-  drug: (id: number | string) => fetch(`/api/v1/drugs/${id}`).then(J<import("./types").DrugDetail>),
-  molecules: (f: Record<string, unknown>) =>
-    fetch(`/api/v1/molecules${q(f)}`).then(
-      J<{ meta: { total: number; page: number; pages: number }; data: import("./types").MoleculeSummary[] }>
-    ),
-  molecule: (id: number | string) => fetch(`/api/v1/molecules/${id}`).then(J<import("./types").MoleculeDetail>),
-  companies: (f: Record<string, unknown>) =>
-    fetch(`/api/v1/companies${q(f)}`).then(
-      J<{ meta: { total: number; page: number; pages: number }; data: import("./types").CompanySummary[] }>
-    ),
-  company: (slug: string, page = 1) =>
-    fetch(`/api/v1/companies/${slug}${q({ page })}`).then(J<import("./types").CompanyDetail>),
-  alerts: (f: Record<string, unknown>) =>
-    fetch(`/api/v1/alerts${q(f)}`).then(
-      J<{
-        meta: { total: number };
-        reason_breakdown: { reason: string; count: number }[];
-        data: import("./types").NsqAlert[];
-      }>
-    ),
-};
+export async function get<T = any>(path: string, params?: Record<string, unknown>): Promise<T> {
+  const r = await fetch(`${BASE}${path}${qs(params)}`);
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  return r.json();
+}
 
+export async function post<T = any>(path: string, body: unknown): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  return r.json();
+}
+
+export const csvUrl = (path: string, params?: Record<string, unknown>) => `${BASE}${path}${qs({ ...params, format: "csv" })}`;
+
+// ---------- formatting
 export const inr = (n: number | null | undefined, dash = "—") =>
-  n === null || n === undefined
+  n === null || n === undefined || Number.isNaN(n)
     ? dash
     : "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: n < 100 ? 2 : 0 });
 
-export const pct = (n: number | null | undefined, dash = "—") =>
-  n === null || n === undefined ? dash : `${n > 0 ? "" : ""}${n.toFixed(1)}%`;
+export const crore = (n: number | null | undefined) =>
+  n == null ? "—" : n >= 1e12 ? `₹${(n / 1e12).toFixed(2)}L Cr` : `₹${(n / 1e7).toLocaleString("en-IN", { maximumFractionDigits: 0 })} Cr`;
 
-export const num = (n: number | null | undefined) =>
-  n === null || n === undefined ? "—" : n.toLocaleString("en-IN");
+export const pct = (n: number | null | undefined, digits = 1, dash = "—") =>
+  n === null || n === undefined || Number.isNaN(n) ? dash : `${n.toFixed(digits)}%`;
 
-export const ageDays = (iso: string) =>
-  Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+export const share = (n: number | null | undefined, digits = 1) => (n == null ? "—" : `${(n * 100).toFixed(digits)}%`);
+
+export const signed = (n: number | null | undefined, digits = 2) =>
+  n == null ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(digits)}%`;
+
+export const num = (n: number | null | undefined) => (n === null || n === undefined ? "—" : Number(n).toLocaleString("en-IN"));
+
+export const ago = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const t = new Date(iso.replace(" ", "T")).getTime();
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return `${Math.round(s)}s`;
+  if (s < 5400) return `${Math.round(s / 60)}m`;
+  if (s < 129600) return `${Math.round(s / 3600)}h`;
+  return `${Math.round(s / 86400)}d`;
+};
+
+export const day = (iso: string | null | undefined) =>
+  iso ? new Date(iso.replace(" ", "T")).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "2-digit" }) : "—";
+
+export const hhiLabel = (h: number | null | undefined) =>
+  h == null ? "—" : h >= 2500 ? "CONCENTRATED" : h >= 1500 ? "MODERATE" : "FRAGMENTED";
+
+export const SEV_CLASS: Record<string, string> = { critical: "b-down", high: "b-warn", medium: "b-info", info: "b-mute" };

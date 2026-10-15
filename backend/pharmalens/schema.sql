@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS products (
     action_class      VARCHAR,
     chemical_class    VARCHAR,
     habit_forming     BOOLEAN,
+    indication_group  VARCHAR,       -- retailer category (Diabetes, Hypertension, ...)
     schedule          VARCHAR,       -- H / H1 / X / OTC when known
     uses              VARCHAR,
     side_effects      VARCHAR,
