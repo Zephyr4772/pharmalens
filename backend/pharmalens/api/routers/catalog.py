@@ -182,11 +182,11 @@ def combos(q: str | None = None, molecule_id: int | None = None, therapeutic_cla
     data = db.rows(cur, f"""
         SELECT c.*, s.hhi, s.leader_share,
                coalesce(pa.name, co.name) AS leader
-        FROM combos c
+        FROM (SELECT * FROM combos WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?) c
         LEFT JOIN segment_stats s ON s.segment_type = 'combo' AND s.segment = CAST(c.id AS VARCHAR)
         LEFT JOIN parents pa ON s.leader LIKE 'parent:%' AND pa.id = CAST(split_part(s.leader, ':', 2) AS INT)
         LEFT JOIN companies co ON s.leader LIKE 'company:%' AND co.id = CAST(split_part(s.leader, ':', 2) AS INT)
-        WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?""", args + [limit, (page - 1) * limit])
+        ORDER BY {order.replace('product_count', 'c.product_count')}""", args + [limit, (page - 1) * limit])
     return paged(total, page, limit, data)
 
 
@@ -243,11 +243,12 @@ def molecules(q: str | None = None, therapeutic_class: str | None = None, nlem: 
     total = cur.execute(f"SELECT count(*) FROM molecules m WHERE {w}", args).fetchone()[0]
     data = db.rows(cur, f"""
         SELECT m.*, s.hhi, s.leader_share, coalesce(pa.name, co.name) AS leader
-        FROM molecules m
+        FROM (SELECT m.* FROM molecules m LEFT JOIN segment_stats s ON s.segment_type = 'molecule' AND s.segment = CAST(m.id AS VARCHAR)
+              WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?) m
         LEFT JOIN segment_stats s ON s.segment_type = 'molecule' AND s.segment = CAST(m.id AS VARCHAR)
         LEFT JOIN parents pa ON s.leader LIKE 'parent:%' AND pa.id = CAST(split_part(s.leader, ':', 2) AS INT)
         LEFT JOIN companies co ON s.leader LIKE 'company:%' AND co.id = CAST(split_part(s.leader, ':', 2) AS INT)
-        WHERE {w} ORDER BY {order} LIMIT ? OFFSET ?""", args + [limit, (page - 1) * limit])
+        ORDER BY {order}""", args + [limit, (page - 1) * limit])
     return paged(total, page, limit, data)
 
 

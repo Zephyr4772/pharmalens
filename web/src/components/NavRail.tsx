@@ -1,27 +1,32 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import { useLive } from "../state/live";
 
-const ITEMS = [
-  { key: "1", name: "MKT", path: "/" },
-  { key: "2", name: "SCRN", path: "/screener" },
-  { key: "3", name: "MOL", path: "/molecules" },
-  { key: "4", name: "COMP", path: "/companies" },
-  { key: "5", name: "NSQ", path: "/alerts" },
-  { key: "6", name: "WATCH", path: "/watchlist" },
+export const NAV = [
+  { key: "1", name: "MKT", path: "/", title: "Market monitor" },
+  { key: "2", name: "REG", path: "/reg", title: "Government & regulatory desk" },
+  { key: "3", name: "SHELF", path: "/shelf", title: "Inventory compliance check" },
+  { key: "4", name: "SCRN", path: "/screener", title: "Product screener" },
+  { key: "5", name: "MOL", path: "/molecules", title: "Molecules / salts" },
+  { key: "6", name: "FDC", path: "/fdc", title: "Salt combinations & price spreads" },
+  { key: "7", name: "CO", path: "/groups", title: "Companies & groups, market share" },
+  { key: "8", name: "EQ", path: "/equities", title: "Listed pharma equities" },
+  { key: "9", name: "NEWS", path: "/news", title: "News wire" },
+  { key: "0", name: "FEED", path: "/feeds", title: "Data feeds & methodology" },
+  { key: "w", name: "WATCH", path: "/watch", title: "Watchlist" },
 ];
 
 export function NavRail() {
   const nav = useNavigate();
   const loc = useLocation();
+  const unseen = useLive((s) => s.unseen);
+  const active = (p: string) => (p === "/" ? loc.pathname === "/" : loc.pathname.startsWith(p));
   return (
     <nav className="rail">
-      {ITEMS.map((it) => (
-        <div
-          key={it.path}
-          className={"rail-item" + (loc.pathname === it.path ? " active" : "")}
-          onClick={() => nav(it.path)}
-        >
-          <span className="rail-key">{it.key}</span>
+      {NAV.map((it) => (
+        <div key={it.path} title={it.title} className={"rail-item" + (active(it.path) ? " active" : "")} onClick={() => nav(it.path)}>
+          <span className="rail-key">{it.key.toUpperCase()}</span>
           <span className="rail-name">{it.name}</span>
+          {it.name === "MKT" && unseen > 0 && <span className="rail-dot">{unseen > 99 ? "99+" : unseen}</span>}
         </div>
       ))}
     </nav>

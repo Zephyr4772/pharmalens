@@ -1,38 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, ageDays } from "../lib/api";
+import { Link } from "react-router-dom";
+import { ago, get, type Row } from "../lib/api";
 
 export function StatusBar() {
-  const health = useQuery({ queryKey: ["healthz"], queryFn: api.healthz, refetchInterval: 30_000 });
-  const build = useQuery({ queryKey: ["build"], queryFn: api.build, staleTime: 300_000 });
-
+  const health = useQuery({ queryKey: ["healthz"], queryFn: () => get("/healthz"), refetchInterval: 30_000 });
+  const build = useQuery({ queryKey: ["build"], queryFn: () => get<Record<string, string>>("/meta/build"), staleTime: 600_000 });
+  const feeds = useQuery({ queryKey: ["feeds"], queryFn: () => get<{ data: Row[] }>("/meta/feeds"), refetchInterval: 60_000 });
   const ok = health.data?.ok;
+  const f = feeds.data?.data ?? [];
+  const bad = f.filter((x) => x.last_status === "error").length;
+  const fresh = f.filter((x) => x.last_ok).length;
+  const lastRun = f.map((x) => x.last_run).filter(Boolean).sort().pop();
   return (
     <footer className="statusbar">
-      <span>
-        <span className={"status-dot " + (ok ? "dot-live" : "dot-dead")} />
-        FEED {ok ? "LIVE" : "DOWN"}
-        {health.data ? ` · ${health.data.probe_ms.toFixed(1)}ms` : ""}
-      </span>
+      <span><span className={"status-dot " + (ok ? "dot-live" : "dot-dead")} />API {ok ? "UP" : "DOWN"}{health.data ? ` ${health.data.probe_ms}ms` : ""}</span>
+      <Link to="/feeds" className="sb-link">FEEDS {fresh}/{f.length} OK{bad ? <b style={{ color: "var(--down)" }}> · {bad} ERR</b> : ""} · last sync {ago(lastRun)} ago</Link>
       {build.data && (
-        <>
-          <span>DB v{build.data.schema_version}</span>
-          <span>
-            {Number(build.data.drugs).toLocaleString("en-IN")} PRODUCTS ·{" "}
-            {Number(build.data.companies).toLocaleString("en-IN")} COMPANIES ·{" "}
-            {Number(build.data.molecules).toLocaleString("en-IN")} MOLECULES
-          </span>
-          <span>
-            BUILD AGE <b style={{ color: ageDays(build.data.built_at_utc) > 14 ? "var(--warn)" : "var(--up)" }}>
-              {ageDays(build.data.built_at_utc)}d
-            </b>
-          </span>
-          <span>SRC {build.data.source_file} (−{Number(build.data.duplicates_removed).toLocaleString("en-IN")} DUPES)</span>
-        </>
+        <span>CATALOG {Number(build.data.products).toLocaleString("en-IN")} SKUs · {Number(build.data.molecules).toLocaleString("en-IN")} molecules · {Number(build.data.companies).toLocaleString("en-IN")} companies</span>
       )}
       <span className="spacer" />
-      <span>
-        <kbd>1-6</kbd> screens · <kbd>/</kbd> screener · <kbd>CTRL K</kbd> palette
-      </span>
+      <span><kbd>1-9</kbd> <kbd>0</kbd> <kbd>W</kbd> screens · <kbd>CTRL K</kbd> search</span>
     </footer>
   );
 }

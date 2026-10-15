@@ -1,37 +1,32 @@
 import { useQuery } from "@tanstack/react-query";
-import { api, inr } from "../lib/api";
+import { get, type Row } from "../lib/api";
+import { useLive } from "../state/live";
 
-function TapeContent() {
-  const arb = useQuery({ queryKey: ["arb-tape"], queryFn: () => api.arbitrage(14), staleTime: 120_000 });
-  const build = useQuery({ queryKey: ["build"], queryFn: api.build, staleTime: 300_000 });
-
+function Items() {
+  const quotes = useQuery({ queryKey: ["quotes"], queryFn: () => get<{ data: Row[] }>("/quotes"), refetchInterval: 120_000 });
+  const ev = useQuery({ queryKey: ["events", "tape"], queryFn: () => get("/events", { limit: 12, severity: "critical,high" }) });
+  const live = useLive((s) => s.events);
   const items: React.ReactNode[] = [];
-  if (build.data) {
+  for (const q of quotes.data?.data ?? []) {
+    if (q.price == null) continue;
+    const sym = q.ticker.replace(".NS", "").replace("^CNXPHARMA", "NIFTY PHARMA").replace("^NSEI", "NIFTY 50");
     items.push(
-      <span className="tape-item" key="b">
-        <span className="tape-sym">BUILD</span>
-        <span className="tape-val">{new Date(build.data.built_at_utc).toLocaleDateString("en-IN")}</span>
-        <span className="tape-pos">{Number(build.data.drugs).toLocaleString("en-IN")} PRODUCTS</span>
-      </span>,
-      <span className="tape-item" key="a">
-        <span className="tape-sym">CDSCO NSQ</span>
-        <span className={Number(build.data.nsq_alerts) > 0 ? "tape-neg" : "tape-pos"}>
-          {build.data.nsq_alerts} ALERTS
-        </span>
+      <span className="tape-item" key={q.ticker}>
+        <span className="tape-sym">{sym}</span>
+        <span className="tape-val">{q.price.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
+        {q.change_pct != null && <span className={q.change_pct >= 0 ? "tape-pos" : "tape-neg"}>{q.change_pct >= 0 ? "▲" : "▼"}{Math.abs(q.change_pct).toFixed(2)}%</span>}
       </span>
     );
   }
-  for (const r of arb.data?.data ?? []) {
-    items.push(
-      <span className="tape-item" key={"m" + r.salt.id}>
-        <span className="tape-sym">{r.salt.comp.slice(0, 26)}</span>
-        <span className="tape-val">{inr(r.cheapest)}</span>
-        <span className="tape-pos">▲{r.savings_pct.toFixed(0)}% SPREAD</span>
-        <span className="tape-sym">{r.brands} BRANDS</span>
-      </span>
-    );
-  }
-  if (!items.length) items.push(<span key="w" className="tape-item tape-sym">connecting to feed…</span>);
+  const evs = [...live.filter((e) => ["critical", "high"].includes(e.severity)), ...(ev.data?.data ?? [])].slice(0, 12);
+  evs.forEach((e: Row, i) => {
+    items.splice(Math.min(items.length, (i + 1) * 4), 0,
+      <span className="tape-item" key={"e" + e.id}>
+        <span className={e.severity === "critical" ? "tape-neg" : "tape-warn"}>■ {String(e.kind).toUpperCase()}</span>
+        <span className="tape-val">{String(e.title).slice(0, 90)}</span>
+      </span>);
+  });
+  if (!items.length) items.push(<span key="w" className="tape-item tape-sym">connecting to feeds…</span>);
   return <>{items}</>;
 }
 
@@ -39,10 +34,7 @@ export function TickerTape() {
   return (
     <div className="tape-wrap">
       <span className="tape-label">LIVE·IN</span>
-      <div className="tape-scroll">
-        <TapeContent />
-        <TapeContent />
-      </div>
+      <div className="tape-scroll"><Items /><Items /></div>
     </div>
   );
 }

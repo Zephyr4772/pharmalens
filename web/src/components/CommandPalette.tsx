@@ -2,93 +2,65 @@ import { useEffect, useState } from "react";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api, inr } from "../lib/api";
+import { get, inr, num, type Row } from "../lib/api";
+import { NAV } from "./NavRail";
 
 export function CommandPalette({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
   const nav = useNavigate();
   const [term, setTerm] = useState("");
-
-  useEffect(() => {
-    if (!open) setTerm("");
-  }, [open]);
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => { if (!open) setTerm(""); }, [open]);
+  useEffect(() => { const t = setTimeout(() => setDebounced(term.trim()), 160); return () => clearTimeout(t); }, [term]);
 
   const search = useQuery({
-    queryKey: ["palette", term],
-    queryFn: () => api.search(term, 10),
-    enabled: open && term.trim().length >= 2,
+    queryKey: ["palette", debounced],
+    queryFn: () => get<Record<string, Row[]>>("/search", { q: debounced, limit: 8 }),
+    enabled: open && debounced.length >= 2,
   });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setOpen(!open);
-      }
-      if (e.key === "Escape") setOpen(false);
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setOpen(!open); }
+      if (e.key === "/" && !open && !["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName ?? "")) { e.preventDefault(); setOpen(true); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
 
-  const go = (to: string) => {
-    setOpen(false);
-    nav(to);
-  };
+  const go = (to: string) => { setOpen(false); nav(to); };
+  const d = search.data;
+  const group = (heading: string, rows: Row[] | undefined, render: (r: Row) => [string, string, React.ReactNode, React.ReactNode?]) =>
+    rows && rows.length > 0 ? (
+      <Command.Group heading={heading}>
+        {rows.map((r) => {
+          const [type, to, label, sub] = render(r);
+          return (
+            <Command.Item key={to} value={to} onSelect={() => go(to)}>
+              <span className="cmd-type">{type}</span>
+              <span style={{ color: "var(--text)" }}>{label}</span>
+              {sub && <span className="cmd-sub">{sub}</span>}
+            </Command.Item>
+          );
+        })}
+      </Command.Group>
+    ) : null;
 
-  const results = search.data?.results ?? [];
   return (
-    <Command.Dialog open={open} onOpenChange={setOpen} label="Global command palette" shouldFilter={false}>
-      <Command.Input
-        value={term}
-        onValueChange={setTerm}
-        placeholder="Search drugs, molecules, companies…"
-        autoFocus
-      />
+    <Command.Dialog open={open} onOpenChange={setOpen} label="Search" shouldFilter={false}>
+      <Command.Input value={term} onValueChange={setTerm} placeholder="Dolo 650 · amoxicillin · cefixime + ofloxacin · Cipla · SUNPHARMA" autoFocus />
       <Command.List>
-        <Command.Empty>
-          {term.trim().length < 2 ? "Type at least 2 characters…" : "No matches."}
-        </Command.Empty>
-
-        {results.length > 0 && (
-          <Command.Group heading="Securities">
-            {results.map((r) => (
-              <Command.Item
-                key={`${r.type}-${r.id}`}
-                value={`${r.type}-${r.id}-${r.label}`}
-                onSelect={() => {
-                  if (r.type === "drug") go(`/drugs/${r.id}`);
-                  else if (r.type === "molecule") go(`/molecules/${r.id}`);
-                  else if (r.slug) go(`/companies/${r.slug}`);
-                }}
-              >
-                <span className="cmd-type">{r.type.slice(0, 3).toUpperCase()}</span>
-                <span style={{ color: "var(--text)" }}>{r.label}</span>
-                {typeof r.mrp === "number" && <span className="cmd-sub">{inr(r.mrp)}</span>}
-                <span className="cmd-sub">{r.sub}</span>
-              </Command.Item>
-            ))}
-          </Command.Group>
-        )}
-
+        <Command.Empty>{term.trim().length < 2 ? "Type at least 2 characters…" : search.isFetching ? "searching…" : "No matches."}</Command.Empty>
+        {group("Groups / tickers", d?.parents, (r) => ["GRP", `/g/${r.slug}`, r.name, r.ticker])}
+        {group("Brands / SKUs", d?.products, (r) => ["SKU", `/p/${r.id}`, r.name, <>{r.company} · {inr(r.mrp)}</>])}
+        {group("Molecules", d?.molecules, (r) => ["MOL", `/m/${r.id}`, r.name, `${num(r.product_count)} SKUs`])}
+        {group("Combinations", d?.combos, (r) => ["FDC", `/c/${r.id}`, r.label, `${num(r.product_count)} brands`])}
+        {group("Companies", d?.companies, (r) => ["CO", `/co/${r.slug}`, r.name, `${num(r.product_count)} SKUs`])}
         <Command.Group heading="Screens">
-          <Command.Item value="go-market" onSelect={() => go("/")}>
-            <span className="cmd-type">NAV</span> Market Overview
-          </Command.Item>
-          <Command.Item value="go-screener" onSelect={() => go("/screener")}>
-            <span className="cmd-type">NAV</span> Drug Screener
-          </Command.Item>
-          <Command.Item value="go-molecules" onSelect={() => go("/molecules")}>
-            <span className="cmd-type">NAV</span> Molecules
-          </Command.Item>
-          <Command.Item value="go-companies" onSelect={() => go("/companies")}>
-            <span className="cmd-type">NAV</span> Companies
-          </Command.Item>
-          <Command.Item value="go-alerts" onSelect={() => go("/alerts")}>
-            <span className="cmd-type">NAV</span> NSQ Alerts (CDSCO)
-          </Command.Item>
-          <Command.Item value="go-watch" onSelect={() => go("/watchlist")}>
-            <span className="cmd-type">NAV</span> Watchlist
-          </Command.Item>
+          {NAV.map((n) => (
+            <Command.Item key={n.path} value={`nav-${n.name}-${n.title}`} onSelect={() => go(n.path)}>
+              <span className="cmd-type">{n.key.toUpperCase()}</span> {n.name} <span className="cmd-sub">{n.title}</span>
+            </Command.Item>
+          ))}
         </Command.Group>
       </Command.List>
     </Command.Dialog>

@@ -18,7 +18,7 @@ def overview():
         (SELECT count(*) FROM molecules WHERE product_count > 0) molecules,
         (SELECT count(*) FROM combos WHERE molecule_count > 1) fdcs,
         (SELECT count(*) FROM companies WHERE product_count > 0) companies,
-        (SELECT count(*) FROM parents) groups,
+        (SELECT count(*) FROM parents) parent_groups,
         (SELECT count(*) FROM combos WHERE banned_skus > 0) banned_combos,
         (SELECT count(*) FROM products WHERE ban_level = 'exact' AND coalesce(is_discontinued,false)=false) banned_skus_listed,
         (SELECT count(*) FROM products WHERE ban_level = 'review' AND coalesce(is_discontinued,false)=false) ban_review_skus,
