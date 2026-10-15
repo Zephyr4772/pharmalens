@@ -4,6 +4,45 @@ import { day, get, inr, num, type Row } from "../lib/api";
 import { ErrorBox, Kpi, Loading, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 
+const SAFETY_LABEL: Record<string, string> = {
+  alcohol_interaction: "Alcohol", pregnancy: "Pregnancy", breastfeeding: "Breastfeeding", driving: "Driving", kidney: "Kidney", liver: "Liver",
+};
+
+function LivePanel({ id, catalogUnit }: { id: number; catalogUnit: number | null }) {
+  const live = useQuery({ queryKey: ["product-live", id], queryFn: () => get(`/products/${id}/live`), staleTime: 3600_000 });
+  if (live.isLoading) return <Panel title="Live listing" sub="DrugSetu"><Loading what="checking live listing" /></Panel>;
+  if (!live.data?.found) return null;
+  const l = live.data;
+  // compare per unit: live and catalog often quote different pack sizes
+  const pk = (l.packagings ?? []).find((p: Row) => p.mrp && Number(p.qty) > 0);
+  const liveUnit = pk ? pk.mrp / Number(pk.qty) : null;
+  const delta = liveUnit && catalogUnit ? ((liveUnit / catalogUnit - 1) * 100) : null;
+  return (
+    <Panel title="Live listing" sub={`DrugSetu · fetched ${day(l.fetched_at)}`}>
+      <div className="grid cols-2">
+        <div>
+          <table className="tt"><thead><tr><th>Pack</th><th>Form</th><th className="num">MRP now</th></tr></thead>
+            <tbody>{l.packagings.map((p: Row, i: number) => <tr key={i}><td>{p.packaging}</td><td className="mut">{p.product_form}</td><td className="num amb">{inr(p.mrp)}</td></tr>)}</tbody></table>
+          {delta != null && Math.abs(delta) >= 0.5 && (
+            <div className="note">Live price ₹{liveUnit!.toFixed(2)}/unit is <b className={delta > 0 ? "neg" : "pos"}>{delta > 0 ? "+" : ""}{delta.toFixed(1)}%</b> vs catalog ₹{catalogUnit!.toFixed(2)}/unit.</div>
+          )}
+          <div className="kv">
+            <div><span>Marketer</span>{l.marketing_company ?? "—"}</div>
+            <div><span>Manufacturer</span>{l.manufacturing_company ?? "—"}</div>
+            {l.how_it_works && <div><span>Mechanism</span>{l.how_it_works}</div>}
+          </div>
+        </div>
+        <table className="tt"><thead><tr><th>Safety</th><th>Advice</th><th>Detail</th></tr></thead>
+          <tbody>{Object.entries(l.safety ?? {}).map(([k, v]: [string, any]) => (
+            <tr key={k}><td>{SAFETY_LABEL[k] ?? k}</td>
+              <td><span className={`badge ${/unsafe|consult/.test(v.severity) ? "b-down" : /caution/.test(v.severity) ? "b-warn" : "b-up"}`}>{String(v.severity).replace(/_/g, " ")}</span></td>
+              <td className="mut" title={v.description} style={{ whiteSpace: "normal" }}>{v.description}</td></tr>
+          ))}</tbody></table>
+      </div>
+    </Panel>
+  );
+}
+
 export default function ProductDetail() {
   const { id } = useParams();
   const p = useQuery({ queryKey: ["product", id], queryFn: () => get(`/products/${id}`) });
@@ -76,6 +115,7 @@ export default function ProductDetail() {
           </Panel>
         </div>
       </div>
+      <LivePanel id={d.id} catalogUnit={d.unit_price} />
       {(d.uses || d.side_effects) && (
         <Panel title="Label information" sub="as listed by retailers">
           {d.uses && <p className="prose"><b>Indications:</b> {d.uses}</p>}

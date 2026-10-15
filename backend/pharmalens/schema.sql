@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS molecules (
 
 CREATE TABLE IF NOT EXISTS combos (
     id              INTEGER PRIMARY KEY,
-    ckey            VARCHAR UNIQUE,  -- sorted molecule|strength list
+    ckey            VARCHAR UNIQUE,  -- sorted molecule:strength list + '#' + form family
     mkey            VARCHAR,         -- sorted molecule list (strength-agnostic)
     label           VARCHAR,
     molecule_count  INTEGER,
@@ -52,7 +52,12 @@ CREATE TABLE IF NOT EXISTS combos (
     median_mrp      DOUBLE,
     max_mrp         DOUBLE,
     therapeutic_class VARCHAR,
-    is_banned       BOOLEAN DEFAULT FALSE
+    is_banned       BOOLEAN DEFAULT FALSE,
+    form_family     VARCHAR,         -- tablet | capsule | injection | oral liquid | topical | ...
+    min_unit        DOUBLE,          -- per-unit price band (outliers below 15% of median excluded)
+    median_unit     DOUBLE,
+    max_unit        DOUBLE,
+    banned_skus     INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -311,4 +316,31 @@ CREATE TABLE IF NOT EXISTS inventory_items (
     product_id   INTEGER,
     match_score  DOUBLE,
     added_at     TIMESTAMP
+);
+
+-- DrugSetu (api.drugsetu.com): live product records, newest-first launch scanning + on-demand enrichment
+CREATE TABLE IF NOT EXISTS drugsetu_products (
+    product_id         VARCHAR PRIMARY KEY,
+    name               VARCHAR,
+    name_norm          VARCHAR,
+    product_type       VARCHAR,
+    composition        VARCHAR,
+    marketing_company  VARCHAR,
+    manufacturing_company VARCHAR,
+    mrp                DOUBLE,
+    packaging          VARCHAR,
+    product_form       VARCHAR,
+    therapeutic_class  VARCHAR,
+    action_class       VARCHAR,
+    chemical_class     VARCHAR,
+    habit_forming      BOOLEAN,
+    safety             JSON,          -- alcohol/pregnancy/breastfeeding/driving/kidney/liver {severity, description}
+    raw                JSON,
+    catalog_product_id INTEGER,
+    first_seen         TIMESTAMP,
+    fetched_at         TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS drugsetu_state (
+    key   VARCHAR PRIMARY KEY,
+    value VARCHAR
 );

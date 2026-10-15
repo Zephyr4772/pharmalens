@@ -83,14 +83,15 @@ def concentration(type: str = Query("molecule", pattern="^(molecule|combo)$"), m
 def spreads(min_brands: int = 5, therapeutic_class: str | None = None, limit: int = Query(50, le=500), format: str = "json"):
     """Same composition, very different price: cheapest vs costliest brand and the Jan Aushadhi price."""
     cur = db.cursor()
-    where, args = ["k.product_count >= ?", "k.min_mrp > 0"], [min_brands]
+    where, args = ["k.product_count >= ?", "k.min_unit > 0"], [min_brands]
     if therapeutic_class:
         where.append("k.therapeutic_class = ?"); args.append(therapeutic_class)
     data = db.rows(cur, f"""
-        SELECT k.id, k.label, k.therapeutic_class, k.product_count, k.company_count, k.min_mrp, k.median_mrp, k.max_mrp,
-               round(k.max_mrp / k.min_mrp, 1) AS spread_x, k.banned_skus
+        SELECT k.id, k.label, k.form_family, k.therapeutic_class, k.product_count, k.company_count,
+               k.min_unit, k.median_unit, k.max_unit, k.min_mrp, k.median_mrp, k.max_mrp,
+               round(k.max_unit / k.min_unit, 1) AS spread_x, k.banned_skus
         FROM combos k WHERE {' AND '.join(where)}
-        ORDER BY k.product_count * ln(k.max_mrp / k.min_mrp) DESC LIMIT ?""", args + [limit])
+        ORDER BY k.product_count * ln(k.max_unit / k.min_unit) DESC LIMIT ?""", args + [limit])
     if format == "csv":
         return csv_response(data, "price_spreads")
     return {"data": cleanrows(data)}

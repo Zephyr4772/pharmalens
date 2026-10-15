@@ -48,7 +48,7 @@ def company_key(name: str) -> str:
 def display_name(raw: str, key: str) -> str:
     r = raw.strip()
     # raw carries scrape junk (strength digits, glued company) -> fall back to the cleaned key
-    if re.search(r"\d", r) or re.search(r"(pvt|ltd|limited|llp)", r, re.I):
+    if re.search(r"\d", r) or re.search(r"\b(pvt|ltd|limited|llp)", r, re.I):
         return key.title()
     if r.isupper() or r.islower():
         return r.title()
@@ -61,6 +61,41 @@ def bulk_insert(con, table: str, cols: list[str], rows: list[tuple]):
     con.register("_bulk", df)
     con.execute(f"INSERT INTO {table} ({', '.join(cols)}) SELECT {', '.join(cols)} FROM _bulk")
     con.unregister("_bulk")
+
+
+GLUED_MFR = re.compile(r"^(.*?\b(?i:ltd|limited|llp|inc|pvt|private)\.?)(?=[A-Z][a-z]+.*\()")
+
+
+def clean_mfr(raw: str | None) -> str | None:
+    """'Morepen Laboratories LTDSitagliptin (100mg)' -> 'Morepen Laboratories LTD'."""
+    if not raw:
+        return raw
+    m = GLUED_MFR.match(raw)
+    return m.group(1).strip() if m else raw.strip()
+
+
+FORM_FAMILIES = [
+    ("injection", ("injection", "infusion", "vial", "ampoule", "prefilled", "pen", "cartridge")),
+    ("inhalation", ("inhal", "respule", "rotacap", "nebul", "aerosol")),
+    ("eye/ear drops", ("eye", "ear", "ophthalmic")),
+    ("oral liquid", ("syrup", "suspension", "solution", "liquid", "drop", "linctus", "elixir", "emulsion", "expectorant")),
+    ("topical", ("cream", "gel", "ointment", "lotion", "spray", "soap", "shampoo", "powder for", "dusting", "paste", "foam", "patch", "serum", "wash")),
+    ("powder/granules", ("powder", "sachet", "granule")),
+    ("capsule", ("capsule", "softgel")),
+    ("tablet", ("tablet", "caplet")),
+    ("suppository", ("suppositor", "pessar", "vaginal")),
+]
+
+
+def form_family(form: str | None, name: str) -> str:
+    text = f"{form or ''} {name}".lower()
+    for fam, words in FORM_FAMILIES:
+        if any(w in (form or "").lower() for w in words):
+            return fam
+    for fam, words in FORM_FAMILIES:
+        if any(w in text for w in words):
+            return fam
+    return "unspecified"
 
 
 def to_bool(v):
@@ -208,7 +243,7 @@ def build():
         mrp_old = to_float(price)
         rec = {
             "id": pid, "src_id": mid, "name": name, "name_norm": key,
-            "manufacturer_raw": mfr or (o and o["mfr"]), "dosage_form": form, "pack_size": pack or (o and o["pack"]),
+            "manufacturer_raw": clean_mfr(mfr or (o and o["mfr"])), "dosage_form": form, "pack_size": pack or (o and o["pack"]),
             "mrp": mrp_old, "mrp_asof": "2022-24" if mrp_old else None, "mrp_legacy": mrp_old,
             "composition": comp or (o and o["comp"]),
             "rx_required": to_bool(rx), "is_discontinued": to_bool(disc), "in_stock": None,
@@ -239,7 +274,7 @@ def build():
         pid = len(products) + 1
         products.append({
             "id": pid, "src_id": None, "name": o["name"], "name_norm": key,
-            "manufacturer_raw": o["mfr"], "dosage_form": None, "pack_size": o["pack"],
+            "manufacturer_raw": clean_mfr(o["mfr"]), "dosage_form": None, "pack_size": o["pack"],
             "mrp": o["mrp"], "mrp_asof": "2025" if o["mrp"] else None, "mrp_legacy": None,
             "composition": o["comp"], "rx_required": o["rx"], "is_discontinued": None,
             "in_stock": o["in_stock"], "therapeutic_class": None, "action_class": None,
@@ -256,6 +291,10 @@ def build():
              "infusion", "lozenge", "granules", "patch", "suppository", "kit", "emulsion", "paste", "rotacap"]
     for p in products:
         n = p["name_norm"]
+        df = (p["dosage_form"] or "").lower()
+        # some sources put the whole glued pack/maker string in the form column ("strip of 10 tablet srblair remedies")
+        if df and (len(df) > 30 or re.search(r"\b(strip|bottle|tube|vial|box|packet) of\b", df)):
+            p["dosage_form"] = None
         if not p["dosage_form"] or p["dosage_form"].lower() in ("allopathy", "ayurvedic", "homeopathy", "unani"):
             for fm in FORMS:
                 if f" {fm}" in f" {n}":
@@ -313,13 +352,17 @@ def build():
     prod_by_id = {p["id"]: p for p in products}
     for pid, parts in per_product.items():
         parts.sort()
-        ckey = "|".join(f"{k}:{s}" for k, s in parts)
+        p0 = prod_by_id[pid]
+        fam = form_family(p0["dosage_form"], p0["name_norm"])
+        # same molecules + strengths + dosage-form family = genuinely substitutable products
+        ckey = "|".join(f"{k}:{s}" for k, s in parts) + f"#{fam}"
         if ckey not in combo_ids:
             combo_ids[ckey] = len(combo_ids) + 1
             combo_meta[ckey] = {
                 "mkey": "|".join(k for k, _ in parts),
-                "label": " + ".join(f"{mol_by_key[k]['name']}{(' ' + s) if s else ''}" for k, s in parts),
-                "n": len(parts),
+                "label": " + ".join(f"{mol_by_key[k]['name']}{(' ' + s) if s else ''}" for k, s in parts)
+                         + (f" · {fam}" if fam != "unspecified" else ""),
+                "n": len(parts), "fam": fam,
             }
         p = prod_by_id[pid]
         p["combo_id"] = combo_ids[ckey]
@@ -403,8 +446,8 @@ def build():
             for k, v in mol_by_key.items()
         ],
     )
-    bulk_insert(con, "combos", ["id", "ckey", "mkey", "label", "molecule_count"],
-        [(cid, ck, combo_meta[ck]["mkey"], combo_meta[ck]["label"], combo_meta[ck]["n"]) for ck, cid in combo_ids.items()],
+    bulk_insert(con, "combos", ["id", "ckey", "mkey", "label", "molecule_count", "form_family"],
+        [(cid, ck, combo_meta[ck]["mkey"], combo_meta[ck]["label"], combo_meta[ck]["n"], combo_meta[ck]["fam"]) for ck, cid in combo_ids.items()],
     )
 
     cols = ["id", "src_id", "name", "name_norm", "company_id", "manufacturer_raw", "dosage_form", "pack_size",
@@ -458,6 +501,14 @@ def build():
         FROM (SELECT combo_id, count(*) pc, count(DISTINCT company_id) cc,
                      min(mrp) mn, median(mrp) md, max(mrp) mx, mode(therapeutic_class) tc
               FROM products WHERE combo_id IS NOT NULL GROUP BY 1) s
+        WHERE combos.id = s.combo_id""")
+    con.execute("""
+        UPDATE combos SET min_unit = s.mn, median_unit = s.md, max_unit = s.mx
+        FROM (SELECT p.combo_id, min(p.unit_price) mn, median(p.unit_price) md, max(p.unit_price) mx
+              FROM products p
+              JOIN (SELECT combo_id, median(unit_price) med FROM products WHERE unit_price > 0 GROUP BY 1) m USING (combo_id)
+              WHERE p.unit_price >= 0.15 * m.med AND p.unit_price <= 20 * m.med
+              GROUP BY 1) s
         WHERE combos.id = s.combo_id""")
     con.execute("""
         UPDATE companies SET

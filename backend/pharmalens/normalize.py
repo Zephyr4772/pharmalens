@@ -171,3 +171,15 @@ def pack_quantity(pack: str | None) -> tuple[float | None, str | None]:
     q = float(m.group(1))
     unit = (m.group(2) or "").lower() or None
     return (q if q > 0 else None), unit
+
+
+def fix_mojibake(s: str | None) -> str | None:
+    """Undo UTF-8 text that was decoded as Latin-1/CP1252 upstream ('LantusÂ®' -> 'Lantus®')."""
+    if not s or not any(ch in s for ch in "ÂÃâ"):
+        return s
+    for enc in ("cp1252", "latin-1"):
+        try:
+            return s.encode(enc).decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            continue
+    return s

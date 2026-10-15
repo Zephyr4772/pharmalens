@@ -2,7 +2,7 @@
 
 Market-share estimate (no paid sales data — see docs/METHODOLOGY.md):
 
-    weight(sku) = MRP_per_pack x availability x reach
+    weight(sku) = sqrt(MRP_per_pack) x availability x reach
       availability = 1.0 in stock on an e-pharmacy in the latest scrape
                      0.6 status unknown
                      0.25 listed out of stock, 0.0 discontinued
@@ -21,8 +21,10 @@ from . import db
 
 log = logging.getLogger("pharmalens.derived")
 
+# sqrt(MRP): pure MRP weighting let a handful of lakh-rupee oncology biologics outrank Sun/Cipla;
+# square-root dampening reproduces the published IPM ordering of the top groups much more closely.
 WEIGHT_SQL = """
-    p.mrp
+    sqrt(p.mrp)
     * CASE WHEN coalesce(p.is_discontinued, false) THEN 0.0
            WHEN p.in_stock IS TRUE THEN 1.0
            WHEN p.in_stock IS FALSE THEN 0.25
@@ -145,7 +147,7 @@ def refresh_bans(cur):
                     break
             if level is None:
                 continue
-            prod_str = dict(x.split(":", 1) for x in ckey.split("|"))
+            prod_str = dict(x.split(":", 1) for x in ckey.split("#", 1)[0].split("|"))
             for mol, allowed in strengths.items():
                 s = prod_str.get(mol, "")
                 if not s:
@@ -155,6 +157,8 @@ def refresh_bans(cur):
                     break
             if level is None:
                 continue
+            if level == "exact" and text.count("+") + 1 > len(mkey.split("|")):
+                level = "review"
             prev = hits.get(pid)
             if not prev or (prev[0] == "review" and level == "exact"):
                 hits[pid] = (level, ban_id)

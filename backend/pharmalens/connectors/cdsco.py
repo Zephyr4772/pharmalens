@@ -15,7 +15,7 @@ import pdfplumber
 from selectolax.lexbor import LexborHTMLParser
 
 from .. import db, matcher
-from ..normalize import norm
+from ..normalize import fix_mojibake, norm
 from .base import Connector
 
 CDSCO = "https://cdsco.gov.in"
@@ -196,11 +196,11 @@ def cdsco_listing(conn: Connector, path: str) -> list[dict]:
         tds = tr.css("td")
         a = tr.css_first("a[href*=download_file]")
         if len(tds) >= 3 and a:
-            out.append({"title": tds[1].text(strip=True), "date": parse_cdsco_date(tds[2].text(strip=True)),
+            out.append({"title": fix_mojibake(tds[1].text(strip=True)), "date": parse_cdsco_date(tds[2].text(strip=True)),
                         "url": CDSCO + a.attributes["href"]})
     # list-style pages (nsq-drugs)
     for m in re.finditer(r"href='([^']*num_id=[^']*)'>\s*<span[^>]*>\s*([^<]+)</span>.*?</i>\s*(\d{4}-[A-Za-z]{3}-\d{2})", html, re.S):
-        out.append({"title": m.group(2).strip(), "date": parse_cdsco_date(m.group(3)), "url": CDSCO + m.group(1)})
+        out.append({"title": fix_mojibake(m.group(2).strip()), "date": parse_cdsco_date(m.group(3)), "url": CDSCO + m.group(1)})
     return out
 
 

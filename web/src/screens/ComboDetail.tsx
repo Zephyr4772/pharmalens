@@ -24,10 +24,10 @@ export default function ComboDetail() {
       <div className="kpis">
         <Kpi label="Brands" value={num(d.product_count)} />
         <Kpi label="Marketers" value={num(d.company_count)} />
-        <Kpi label="Cheapest MRP" value={inr(d.min_mrp)} tone="up" />
-        <Kpi label="Median MRP" value={inr(d.median_mrp)} tone="amber" />
-        <Kpi label="Costliest MRP" value={inr(d.max_mrp)} tone="down" />
-        <Kpi label="Spread" value={d.min_mrp ? `${(d.max_mrp / d.min_mrp).toFixed(1)}×` : "—"} />
+        <Kpi label="Cheapest / unit" value={inr(d.min_unit)} tone="up" sub={`pack from ${inr(d.min_mrp)}`} />
+        <Kpi label="Median / unit" value={inr(d.median_unit)} tone="amber" sub={`median pack ${inr(d.median_mrp)}`} />
+        <Kpi label="Costliest / unit" value={inr(d.max_unit)} tone="down" />
+        <Kpi label="Spread" value={d.min_unit ? `${(d.max_unit / d.min_unit).toFixed(1)}×` : "—"} sub={d.form_family} />
         <Kpi label="Jan Aushadhi" value={ja ? inr(ja.mrp) : "—"} sub={ja ? `${ja.unit_size} · ${ja.name}` : "no PMBI equivalent"} />
       </div>
       {d.ban?.length > 0 && (

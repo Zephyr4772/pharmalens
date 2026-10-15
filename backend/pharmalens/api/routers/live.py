@@ -54,6 +54,22 @@ async def run_connector(name: str):
     return await run_in_threadpool(scheduler.run_now, name)
 
 
+@router.post("/admin/maintenance/fix-text")
+def fix_text():
+    """One-off repair of mis-decoded regulator titles stored before fix_mojibake existed."""
+    from ...normalize import fix_mojibake
+    n = 0
+    with db.writer() as cur:
+        for table, key in (("events", "id"), ("reg_documents", "id"), ("reg_nsq", "id")):
+            col = "product_text" if table == "reg_nsq" else "title"
+            for rid, txt in cur.execute(f"SELECT {key}, {col} FROM {table} WHERE {col} LIKE '%Â%' OR {col} LIKE '%â%' OR {col} LIKE '%Ã%'").fetchall():
+                fixed = fix_mojibake(txt)
+                if fixed != txt:
+                    cur.execute(f"UPDATE {table} SET {col} = ? WHERE {key} = ?", [fixed, rid])
+                    n += 1
+    return {"fixed": n}
+
+
 @router.get("/events")
 def events(kind: str | None = None, severity: str | None = None, since_id: int | None = None,
            entity_type: str | None = None, entity_id: int | None = None, q: str | None = None,

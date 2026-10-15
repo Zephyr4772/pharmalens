@@ -6,6 +6,7 @@ process (scheduler thread) and serialize their writes through WRITE_LOCK.
 """
 import threading
 from contextlib import contextmanager
+from pathlib import Path
 
 import duckdb
 
@@ -30,6 +31,8 @@ def get_conn() -> duckdb.DuckDBPyConnection:
                     f"database not found at {DB_PATH}. run: py -3 -m pharmalens.pipeline.build_core"
                 )
             _conn = duckdb.connect(str(DB_PATH))
+            # live tables are CREATE IF NOT EXISTS, so new ones appear without a core rebuild
+            _conn.execute((Path(__file__).parent / "schema.sql").read_text())
         return _conn
 
 

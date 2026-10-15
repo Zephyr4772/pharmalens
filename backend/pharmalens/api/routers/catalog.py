@@ -132,12 +132,17 @@ def product(pid: int):
     p["equivalents"] = db.rows(cur, f"""
         SELECT {PRODUCT_COLS} {PRODUCT_FROM}
         WHERE p.combo_id = ? AND p.id <> ? AND p.mrp IS NOT NULL
-        ORDER BY coalesce(p.unit_price, p.mrp) ASC LIMIT 25""", [p["combo_id"], pid]) if p["combo_id"] else []
+          AND p.dosage_form IS NOT DISTINCT FROM ?
+          AND coalesce(p.unit_price, 1e9) >= 0.15 * coalesce((SELECT median(unit_price) FROM products
+                WHERE combo_id = ? AND dosage_form IS NOT DISTINCT FROM ?), 0)
+        ORDER BY coalesce(p.unit_price, p.mrp) ASC LIMIT 25""",
+        [p["combo_id"], pid, p["dosage_form"], p["combo_id"], p["dosage_form"]]) if p["combo_id"] else []
     p["price_history"] = db.rows(cur, "SELECT observed_on, mrp, source FROM price_observations WHERE product_id = ? ORDER BY observed_on", [pid])
     p["nppa_ceiling"] = db.rows(cur, f"""
         SELECT molecule_name, form_strength, ceiling_price, unit, notification, year FROM nppa_ceiling
         WHERE molecule_id IN ({','.join('?' * len(mids))}) ORDER BY year DESC""", mids) if mids else []
-    p["jan_aushadhi"] = jan_aushadhi_for(cur, mids, p["molecule_count"] or len(mids))
+    p["jan_aushadhi"] = jan_aushadhi_for(cur, mids, p["molecule_count"] or len(mids),
+                                         [m["strength"] for m in p["molecules"]], p["dosage_form"])
     # quality record of the same maker for the same molecules
     p["nsq_same_maker"] = db.rows(cur, """
         SELECT alert_month, category, product_text, batch_no, reason, lab, source_url FROM reg_nsq
@@ -151,13 +156,53 @@ def product(pid: int):
     return cleanrows([p])[0]
 
 
-def jan_aushadhi_for(cur, mids: list[int], n: int) -> list[dict]:
+@router.get("/products/{pid}/live")
+async def product_live(pid: int):
+    """Live DrugSetu record (current MRP per pack, safety profile); cached 14 days, quota-aware."""
+    from fastapi.concurrency import run_in_threadpool
+    from ...connectors.drugsetu import lookup
+    row = await run_in_threadpool(lookup, pid)
+    if not row:
+        return {"found": False}
+    for k in ("safety", "raw"):
+        if isinstance(row.get(k), str):
+            row[k] = json.loads(row[k])
+    raw = row.pop("raw", {}) or {}
+    row["packagings"] = raw.get("packagings", [])
+    row["how_it_works"] = raw.get("how_it_works")
+    row["missed_dose"] = raw.get("missed_dose")
+    return {"found": True, **cleanrows([row])[0]}
+
+
+FORM_FAMILY = {
+    "tablet": ("tablet",), "capsule": ("capsule",), "injection": ("injection", "infusion", "vial"),
+    "syrup": ("syrup", "suspension", "oral solution", "oral liquid", "elixir"), "suspension": ("suspension", "syrup", "oral"),
+    "cream": ("cream",), "gel": ("gel",), "ointment": ("ointment",), "drop": ("drop",), "eye drops": ("drop",),
+    "lotion": ("lotion",), "powder": ("powder", "sachet", "granules"), "inhaler": ("inhal",), "solution": ("solution",),
+}
+
+
+def jan_aushadhi_for(cur, mids: list[int], n: int, strengths: list[str] | None = None, form: str | None = None) -> list[dict]:
+    """PMBI generics with the same molecules; when strengths/form are given they must match too."""
+    import re
     if not mids:
         return []
     conds = " AND ".join(["list_contains(string_split(molecule_ids, ','), ?)"] * len(mids))
-    return db.rows(cur, f"""
+    rows = db.rows(cur, f"""
         SELECT drug_code, name, unit_size, mrp, group_name FROM jan_aushadhi
-        WHERE {conds} AND len(string_split(molecule_ids, ',')) = ? ORDER BY mrp LIMIT 8""", [str(m) for m in mids] + [n])
+        WHERE {conds} AND len(string_split(molecule_ids, ',')) = ? ORDER BY mrp LIMIT 60""", [str(m) for m in mids] + [n])
+    nums = [re.findall(r"\d+(?:\.\d+)?", s or "") for s in (strengths or [])]
+    nums = [x[0] for x in nums if x]
+    fam = FORM_FAMILY.get((form or "").strip().lower())
+    out = []
+    for r in rows:
+        name = r["name"].lower()
+        if nums and not all(re.search(rf"(?<![\d.]){re.escape(x)}(?![\d])", name) for x in nums):
+            continue
+        if fam and not any(w in name for w in fam):
+            continue
+        out.append(r)
+    return out[:8]
 
 
 # ------------------------------------------------------------------ combos (salt combinations)
@@ -174,8 +219,8 @@ def combos(q: str | None = None, molecule_id: int | None = None, therapeutic_cla
         where.append("therapeutic_class = ?"); args.append(therapeutic_class)
     if banned is not None:
         where.append("coalesce(banned_skus, 0) > 0" if banned else "coalesce(banned_skus, 0) = 0")
-    order = {"brands": "product_count DESC", "spread": "(max_mrp / nullif(min_mrp, 0)) DESC NULLS LAST",
-             "companies": "company_count DESC", "median": "median_mrp DESC NULLS LAST"}.get(sort, "product_count DESC")
+    order = {"brands": "product_count DESC", "spread": "(max_unit / nullif(min_unit, 0)) DESC NULLS LAST",
+             "companies": "company_count DESC", "median": "median_unit DESC NULLS LAST"}.get(sort, "product_count DESC")
     w = " AND ".join(where)
     cur = db.cursor()
     total = cur.execute(f"SELECT count(*) FROM combos WHERE {w}", args).fetchone()[0]
@@ -205,7 +250,9 @@ def combo(cid: int):
     c["stats"] = db.one(cur, "SELECT * FROM segment_stats WHERE segment_type='combo' AND segment = ?", [str(cid)])
     c["ban"] = db.rows(cur, "SELECT combo_text, notification, notified_on, status, source_url FROM reg_banned_fdc WHERE mkey = ?", [c["mkey"]])
     mids = [m["id"] for m in c["molecules"]]
-    c["jan_aushadhi"] = jan_aushadhi_for(cur, mids, len(mids))
+    fam = {"oral liquid": "syrup", "topical": None, "unspecified": None, "eye/ear drops": "drop",
+           "powder/granules": "powder"}.get(c.get("form_family"), c.get("form_family"))
+    c["jan_aushadhi"] = jan_aushadhi_for(cur, mids, len(mids), [m["strength"] for m in c["molecules"]], fam)
     c["related"] = db.rows(cur, """SELECT id, label, product_count, min_mrp, median_mrp FROM combos
                                    WHERE mkey = ? AND id <> ? ORDER BY product_count DESC LIMIT 20""", [c["mkey"], cid])
     return cleanrows([c])[0]

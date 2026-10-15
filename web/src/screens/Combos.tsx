@@ -38,14 +38,14 @@ export default function Combos() {
         {mode === "spreads" && <a href={csvUrl("/market/spreads", { therapeutic_class: cls, limit: 500 })}>CSV ⤓</a>}
       </div>
       {mode === "spreads" ? (
-        <Panel title="Same salt, same strength — price spread" sub="ranked by brands × log(max/min). The procurement opportunity list.">
+        <Panel title="Same salt, same strength — price spread" sub="same molecules, strengths and dosage form; per-unit prices, outliers excluded; ranked by brands × log(max/min) — the procurement opportunity list">
           {spreads.isLoading ? <Loading /> : (
             <table className="tt">
-              <thead><tr><th>Composition</th><th>Class</th><th className="num">Brands</th><th className="num">Marketers</th><th className="num">Cheapest</th><th className="num">Median</th><th className="num">Costliest</th><th className="num">Spread</th><th /></tr></thead>
+              <thead><tr><th>Composition</th><th>Class</th><th className="num">Brands</th><th className="num">Marketers</th><th className="num">Cheapest /unit</th><th className="num">Median /unit</th><th className="num">Costliest /unit</th><th className="num">Spread</th><th /></tr></thead>
               <tbody>{spreads.data?.data.map((k: Row) => (
                 <tr key={k.id} onClick={() => nav(`/c/${k.id}`)}>
                   <td title={k.label}>{k.label}</td><td className="mut">{k.therapeutic_class}</td><td className="num">{num(k.product_count)}</td><td className="num">{num(k.company_count)}</td>
-                  <td className="num pos">{inr(k.min_mrp)}</td><td className="num amb">{inr(k.median_mrp)}</td><td className="num neg">{inr(k.max_mrp)}</td>
+                  <td className="num pos">{inr(k.min_unit)}</td><td className="num amb">{inr(k.median_unit)}</td><td className="num neg">{inr(k.max_unit)}</td>
                   <td className="num">{k.spread_x}×</td><td>{k.banned_skus > 0 && <span className="badge b-down">BAN</span>}</td>
                 </tr>
               ))}</tbody>

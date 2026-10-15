@@ -123,7 +123,7 @@ def check(req: CheckRequest):
         prod = None
         if pid:
             prod = db.one(cur, """SELECT p.id, p.name, p.mrp, p.unit_price, p.pack_size, p.combo_id, p.molecule_count,
-                                         p.is_discontinued, p.company_id, c.name company, c.parent_id, p.ban_level, p.ban_id, k.label combo_label
+                                         p.is_discontinued, p.dosage_form, p.company_id, c.name company, c.parent_id, p.ban_level, p.ban_id, k.label combo_label
                                   FROM products p LEFT JOIN companies c ON c.id = p.company_id LEFT JOIN combos k ON k.id = p.combo_id
                                   WHERE p.id = ?""", [pid])
         # batch-level NSQ / spurious hit (works even without a catalog match)
@@ -165,13 +165,17 @@ def check(req: CheckRequest):
             if prod["combo_id"] and prod["mrp"]:
                 cheap = db.one(cur, """SELECT p.id, p.name, p.mrp, p.unit_price, c.name company FROM products p LEFT JOIN companies c ON c.id = p.company_id
                                        WHERE p.combo_id = ? AND coalesce(p.is_discontinued, false) = false AND p.unit_price IS NOT NULL
-                                       ORDER BY p.unit_price LIMIT 1""", [prod["combo_id"]])
+                                         AND p.dosage_form IS NOT DISTINCT FROM ?
+                                         AND p.unit_price >= 0.15 * (SELECT median(unit_price) FROM products
+                                               WHERE combo_id = ? AND dosage_form IS NOT DISTINCT FROM ?)
+                                       ORDER BY p.unit_price LIMIT 1""",
+                               [prod["combo_id"], prod["dosage_form"], prod["combo_id"], prod["dosage_form"]])
                 if cheap and prod["unit_price"] and cheap["unit_price"] < prod["unit_price"] * 0.7:
                     flags.append({"level": "info", "code": "CHEAPER_BRAND",
                                   "message": f"Same composition: {cheap['name']} ({cheap['company']}) at ₹{cheap['unit_price']:.2f}/unit vs ₹{prod['unit_price']:.2f}.",
                                   "product_id": cheap["id"]})
-                mids = [r[0] for r in cur.execute("SELECT molecule_id FROM product_molecules WHERE product_id = ?", [prod["id"]]).fetchall()]
-                ja = jan_aushadhi_for(cur, mids, len(mids))
+                pm = cur.execute("SELECT molecule_id, strength FROM product_molecules WHERE product_id = ?", [prod["id"]]).fetchall()
+                ja = jan_aushadhi_for(cur, [m for m, _ in pm], len(pm), [s for _, s in pm], prod["dosage_form"])
                 if ja:
                     flags.append({"level": "info", "code": "JAN_AUSHADHI",
                                   "message": f"Jan Aushadhi generic: {ja[0]['name']} ({ja[0]['unit_size']}) ₹{ja[0]['mrp']}."})

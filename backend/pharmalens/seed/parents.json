@@ -5,9 +5,8 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^sun( |$)",
-   "^ranbaxy",
-   "^sun pharma"
+   "^sun pharma",
+   "^ranbaxy\\b"
   ]
  },
  {
@@ -16,7 +15,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^cipla"
+   "^cipla\\b"
   ]
  },
  {
@@ -35,7 +34,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^lupin"
+   "^lupin\\b"
   ]
  },
  {
@@ -44,7 +43,7 @@
   "hq": "Ahmedabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^zydus",
+   "^zydus\\b",
    "^cadila healthcare",
    "^german remedies",
    "^biochem( |$)"
@@ -66,8 +65,8 @@
   "hq": "Ahmedabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^torrent",
-   "^elder"
+   "^torrent\\b",
+   "^elder pharma"
   ]
  },
  {
@@ -76,9 +75,9 @@
   "hq": "New Delhi",
   "ownership": "indian_listed",
   "patterns": [
-   "^mankind",
+   "^mankind\\b",
    "^bharat serums",
-   "^lifestar"
+   "^lifestar\\b"
   ]
  },
  {
@@ -87,9 +86,9 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^alkem",
-   "^cachet",
-   "^indchemie"
+   "^alkem\\b",
+   "^cachet\\b",
+   "^indchemie\\b"
   ]
  },
  {
@@ -98,7 +97,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^glenmark"
+   "^glenmark\\b"
   ]
  },
  {
@@ -107,8 +106,8 @@
   "hq": "Hyderabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^aurobindo",
-   "^eugia"
+   "^aurobindo\\b",
+   "^eugia\\b"
   ]
  },
  {
@@ -117,8 +116,8 @@
   "hq": "Ahmedabad",
   "ownership": "indian_private",
   "patterns": [
-   "^intas",
-   "^accord"
+   "^intas\\b",
+   "^accord\\b"
   ]
  },
  {
@@ -127,7 +126,7 @@
   "hq": "Mumbai",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^abbott"
+   "^abbott\\b"
   ]
  },
  {
@@ -136,8 +135,8 @@
   "hq": "Mumbai",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^glaxo",
-   "^gsk"
+   "^glaxo\\b",
+   "^gsk\\b"
   ]
  },
  {
@@ -146,8 +145,8 @@
   "hq": "Mumbai",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^pfizer",
-   "^wyeth"
+   "^pfizer\\b",
+   "^wyeth\\b"
   ]
  },
  {
@@ -156,8 +155,8 @@
   "hq": "Mumbai",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^sanofi",
-   "^aventis"
+   "^sanofi\\b",
+   "^aventis\\b"
   ]
  },
  {
@@ -166,8 +165,8 @@
   "hq": "Mumbai",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^novartis",
-   "^sandoz"
+   "^novartis\\b",
+   "^sandoz\\b"
   ]
  },
  {
@@ -176,7 +175,7 @@
   "hq": "Bengaluru",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^astrazeneca",
+   "^astrazeneca\\b",
    "^astra zeneca"
   ]
  },
@@ -186,7 +185,7 @@
   "hq": "Mumbai",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^procter",
+   "^procter\\b",
    "^p g health",
    "^merck$"
   ]
@@ -197,8 +196,8 @@
   "hq": "Mumbai",
   "ownership": "mnc_private",
   "patterns": [
-   "^msd",
-   "^organon"
+   "^msd\\b",
+   "^organon\\b"
   ]
  },
  {
@@ -207,7 +206,7 @@
   "hq": "Thane",
   "ownership": "mnc_private",
   "patterns": [
-   "^bayer"
+   "^bayer\\b"
   ]
  },
  {
@@ -216,7 +215,7 @@
   "hq": "Mumbai",
   "ownership": "mnc_private",
   "patterns": [
-   "^roche"
+   "^roche\\b"
   ]
  },
  {
@@ -225,7 +224,7 @@
   "hq": "Mumbai",
   "ownership": "mnc_private",
   "patterns": [
-   "^boehringer"
+   "^boehringer\\b"
   ]
  },
  {
@@ -235,7 +234,7 @@
   "ownership": "mnc_private",
   "patterns": [
    "^eli lilly",
-   "^lilly"
+   "^lilly\\b"
   ]
  },
  {
@@ -253,8 +252,8 @@
   "hq": "Hyderabad",
   "ownership": "mnc_private",
   "patterns": [
-   "^mylan",
-   "^viatris"
+   "^mylan\\b",
+   "^viatris\\b"
   ]
  },
  {
@@ -263,8 +262,8 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^ipca",
-   "^unichem"
+   "^ipca\\b",
+   "^unichem\\b"
   ]
  },
  {
@@ -273,7 +272,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^ajanta"
+   "^ajanta\\b"
   ]
  },
  {
@@ -293,8 +292,8 @@
   "hq": "Ahmedabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^eris",
-   "^oaknet"
+   "^eris( |$)",
+   "^oaknet\\b"
   ]
  },
  {
@@ -303,7 +302,7 @@
   "hq": "Hyderabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^natco"
+   "^natco\\b"
   ]
  },
  {
@@ -312,7 +311,8 @@
   "hq": "Bengaluru",
   "ownership": "indian_listed",
   "patterns": [
-   "^biocon"
+   "^biocon( |$)",
+   "^biocon biologics"
   ]
  },
  {
@@ -321,8 +321,8 @@
   "hq": "Pune",
   "ownership": "indian_listed",
   "patterns": [
-   "^emcure",
-   "^zuventus"
+   "^emcure\\b",
+   "^zuventus\\b"
   ]
  },
  {
@@ -331,7 +331,7 @@
   "hq": "Vadodara",
   "ownership": "indian_listed",
   "patterns": [
-   "^alembic"
+   "^alembic\\b"
   ]
  },
  {
@@ -349,7 +349,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^wockhardt"
+   "^wockhardt\\b"
   ]
  },
  {
@@ -358,7 +358,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^indoco"
+   "^indoco\\b"
   ]
  },
  {
@@ -367,7 +367,7 @@
   "hq": "Hyderabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^granules"
+   "^granules\\b"
   ]
  },
  {
@@ -376,7 +376,7 @@
   "hq": "Hyderabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^gland"
+   "^gland pharma"
   ]
  },
  {
@@ -385,7 +385,7 @@
   "hq": "Hyderabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^laurus"
+   "^laurus\\b"
   ]
  },
  {
@@ -394,7 +394,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^piramal"
+   "^piramal\\b"
   ]
  },
  {
@@ -403,7 +403,7 @@
   "hq": "Bengaluru",
   "ownership": "indian_listed",
   "patterns": [
-   "^strides"
+   "^strides\\b"
   ]
  },
  {
@@ -412,7 +412,7 @@
   "hq": "Noida",
   "ownership": "indian_listed",
   "patterns": [
-   "^jubilant"
+   "^jubilant\\b"
   ]
  },
  {
@@ -421,7 +421,7 @@
   "hq": "Mumbai",
   "ownership": "indian_listed",
   "patterns": [
-   "^marksans"
+   "^marksans\\b"
   ]
  },
  {
@@ -430,7 +430,7 @@
   "hq": "Chennai",
   "ownership": "indian_listed",
   "patterns": [
-   "^caplin"
+   "^caplin\\b"
   ]
  },
  {
@@ -439,7 +439,7 @@
   "hq": "New Delhi",
   "ownership": "indian_listed",
   "patterns": [
-   "^akums"
+   "^akums\\b"
   ]
  },
  {
@@ -448,7 +448,7 @@
   "hq": "Hyderabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^divi"
+   "^divi s lab"
   ]
  },
  {
@@ -457,7 +457,7 @@
   "hq": "Ahmedabad",
   "ownership": "indian_listed",
   "patterns": [
-   "^lincoln"
+   "^lincoln pharma"
   ]
  },
  {
@@ -466,7 +466,7 @@
   "hq": "Raichur",
   "ownership": "indian_listed",
   "patterns": [
-   "^shilpa"
+   "^shilpa medicare"
   ]
  },
  {
@@ -475,7 +475,7 @@
   "hq": "Bengaluru",
   "ownership": "indian_private",
   "patterns": [
-   "^micro( |$)"
+   "^micro labs"
   ]
  },
  {
@@ -484,7 +484,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^macleods"
+   "^macleods\\b"
   ]
  },
  {
@@ -493,7 +493,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^usv"
+   "^usv\\b"
   ]
  },
  {
@@ -502,7 +502,7 @@
   "hq": "Ludhiana",
   "ownership": "indian_private",
   "patterns": [
-   "^leeford"
+   "^leeford\\b"
   ]
  },
  {
@@ -511,7 +511,7 @@
   "hq": "Hyderabad",
   "ownership": "indian_private",
   "patterns": [
-   "^hetero"
+   "^hetero\\b"
   ]
  },
  {
@@ -547,7 +547,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^franco"
+   "^franco indian"
   ]
  },
  {
@@ -556,7 +556,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^blue cross"
+   "^blue cross lab"
   ]
  },
  {
@@ -565,7 +565,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^medley"
+   "^medley pharma"
   ]
  },
  {
@@ -574,7 +574,7 @@
   "hq": "Ahmedabad",
   "ownership": "indian_private",
   "patterns": [
-   "^corona"
+   "^corona remedies"
   ]
  },
  {
@@ -583,7 +583,7 @@
   "hq": "Phillaur",
   "ownership": "indian_private",
   "patterns": [
-   "^overseas"
+   "^overseas health"
   ]
  },
  {
@@ -592,7 +592,7 @@
   "hq": "New Delhi",
   "ownership": "indian_private",
   "patterns": [
-   "^systopic"
+   "^systopic\\b"
   ]
  },
  {
@@ -601,7 +601,7 @@
   "hq": "New Delhi",
   "ownership": "indian_private",
   "patterns": [
-   "^east west"
+   "^east west pharma"
   ]
  },
  {
@@ -610,7 +610,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^aristo"
+   "^aristo\\b"
   ]
  },
  {
@@ -619,7 +619,7 @@
   "hq": "New Delhi",
   "ownership": "indian_listed",
   "patterns": [
-   "^morepen",
+   "^morepen\\b",
    "^dr morepen"
   ]
  },
@@ -638,7 +638,7 @@
   "hq": "Goa",
   "ownership": "indian_private",
   "patterns": [
-   "^wallace"
+   "^wallace\\b"
   ]
  },
  {
@@ -647,7 +647,7 @@
   "hq": "Ahmedabad",
   "ownership": "indian_private",
   "patterns": [
-   "^troikaa"
+   "^troikaa\\b"
   ]
  },
  {
@@ -656,7 +656,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^akumentis"
+   "^akumentis\\b"
   ]
  },
  {
@@ -665,7 +665,7 @@
   "hq": "Chennai",
   "ownership": "indian_private",
   "patterns": [
-   "^fourrts"
+   "^fourrts\\b"
   ]
  },
  {
@@ -674,7 +674,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^hegde"
+   "^hegde\\b"
   ]
  },
  {
@@ -683,7 +683,7 @@
   "hq": "New Delhi",
   "ownership": "indian_private",
   "patterns": [
-   "^alniche"
+   "^alniche\\b"
   ]
  },
  {
@@ -692,7 +692,7 @@
   "hq": "Mumbai",
   "ownership": "indian_private",
   "patterns": [
-   "^raptakos"
+   "^raptakos\\b"
   ]
  }
 ]
