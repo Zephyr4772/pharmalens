@@ -1,0 +1,313 @@
+-- PharmaLens v4 schema. Core catalog tables are rebuilt by pipeline/build_core.py;
+-- live tables (events, reg_*, quotes, news, connector_runs, inventory_*) are
+-- created IF NOT EXISTS and survive core rebuilds.
+
+-- ---------------------------------------------------------------- core catalog
+CREATE TABLE IF NOT EXISTS parents (
+    id          INTEGER PRIMARY KEY,
+    slug        VARCHAR UNIQUE,
+    name        VARCHAR,
+    ticker      VARCHAR,          -- NSE symbol, NULL if unlisted
+    hq          VARCHAR,
+    ownership   VARCHAR,          -- indian_listed | indian_private | mnc_subsidiary | ...
+    notes       VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS companies (
+    id              INTEGER PRIMARY KEY,
+    slug            VARCHAR UNIQUE,
+    name            VARCHAR,
+    name_norm       VARCHAR,
+    parent_id       INTEGER,      -- NULL = standalone
+    product_count   INTEGER,
+    active_count    INTEGER,
+    molecule_count  INTEGER,
+    median_mrp      DOUBLE,
+    top_class       VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS molecules (
+    id                INTEGER PRIMARY KEY,
+    mkey              VARCHAR UNIQUE,
+    name              VARCHAR,
+    product_count     INTEGER,
+    company_count     INTEGER,
+    combo_count       INTEGER,
+    therapeutic_class VARCHAR,
+    action_class      VARCHAR,
+    chemical_class    VARCHAR,
+    nppa_ceiling      DOUBLE,
+    is_nlem           BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS combos (
+    id              INTEGER PRIMARY KEY,
+    ckey            VARCHAR UNIQUE,  -- sorted molecule|strength list
+    mkey            VARCHAR,         -- sorted molecule list (strength-agnostic)
+    label           VARCHAR,
+    molecule_count  INTEGER,
+    product_count   INTEGER,
+    company_count   INTEGER,
+    min_mrp         DOUBLE,
+    median_mrp      DOUBLE,
+    max_mrp         DOUBLE,
+    therapeutic_class VARCHAR,
+    is_banned       BOOLEAN DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id                INTEGER PRIMARY KEY,
+    src_id            VARCHAR,       -- master dataset medicine_id
+    name              VARCHAR,
+    name_norm         VARCHAR,
+    company_id        INTEGER,
+    manufacturer_raw  VARCHAR,
+    dosage_form       VARCHAR,
+    pack_size         VARCHAR,
+    pack_qty          DOUBLE,
+    mrp               DOUBLE,        -- best known MRP (newest source wins)
+    mrp_asof          VARCHAR,       -- '2025' | '2024' | '2022' | 'live:<date>'
+    mrp_legacy        DOUBLE,        -- older catalog MRP, for change tracking
+    unit_price        DOUBLE,        -- mrp / pack_qty
+    composition       VARCHAR,
+    combo_id          INTEGER,
+    molecule_count    INTEGER,
+    rx_required       BOOLEAN,
+    is_discontinued   BOOLEAN,
+    in_stock          BOOLEAN,       -- last seen purchasable on an e-pharmacy
+    therapeutic_class VARCHAR,
+    action_class      VARCHAR,
+    chemical_class    VARCHAR,
+    habit_forming     BOOLEAN,
+    schedule          VARCHAR,       -- H / H1 / X / OTC when known
+    uses              VARCHAR,
+    side_effects      VARCHAR,
+    image_url         VARCHAR,
+    source_count      INTEGER,
+    sources           VARCHAR,
+    first_seen        DATE,
+    last_seen         DATE
+);
+
+CREATE TABLE IF NOT EXISTS product_molecules (
+    product_id   INTEGER,
+    molecule_id  INTEGER,
+    strength     VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS interactions (
+    product_id INTEGER,
+    raw        VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS nppa_ceiling (
+    id               INTEGER,
+    molecule_id      INTEGER,
+    molecule_name    VARCHAR,
+    form_strength    VARCHAR,
+    ceiling_price    DOUBLE,
+    unit             VARCHAR,
+    notification     VARCHAR,
+    year             INTEGER,
+    source           VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS build_meta (
+    key   VARCHAR PRIMARY KEY,
+    value VARCHAR
+);
+
+-- ---------------------------------------------------------------- live layer
+CREATE SEQUENCE IF NOT EXISTS seq_events START 1;
+CREATE TABLE IF NOT EXISTS events (
+    id          BIGINT DEFAULT nextval('seq_events') PRIMARY KEY,
+    ts          TIMESTAMP,         -- when it happened (source date) or detected
+    detected_at TIMESTAMP,
+    kind        VARCHAR,           -- nsq | spurious | ban | price_notification | approval | recall | launch | usfda | news | stock | shortage | gazette | tender
+    severity    VARCHAR,           -- critical | high | medium | info
+    title       VARCHAR,
+    body        VARCHAR,
+    source      VARCHAR,
+    url         VARCHAR,
+    entity_type VARCHAR,           -- product | molecule | combo | company | parent | null
+    entity_id   INTEGER,
+    dedupe_key  VARCHAR UNIQUE,
+    payload     JSON
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_nsq START 1;
+CREATE TABLE IF NOT EXISTS reg_nsq (
+    id             BIGINT DEFAULT nextval('seq_nsq') PRIMARY KEY,
+    alert_month    VARCHAR,        -- YYYY-MM of CDSCO list
+    category       VARCHAR,        -- NSQ | SPURIOUS
+    product_text   VARCHAR,
+    batch_no       VARCHAR,
+    mfg_date       VARCHAR,
+    exp_date       VARCHAR,
+    manufacturer   VARCHAR,
+    reason         VARCHAR,
+    drawn_by       VARCHAR,
+    lab            VARCHAR,
+    source_url     VARCHAR,
+    company_id     INTEGER,
+    molecule_ids   VARCHAR,        -- comma list of matched molecule ids
+    dedupe_key     VARCHAR UNIQUE,
+    fetched_at     TIMESTAMP
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_ban START 1;
+CREATE TABLE IF NOT EXISTS reg_banned_fdc (
+    id             BIGINT DEFAULT nextval('seq_ban') PRIMARY KEY,
+    combo_text     VARCHAR,
+    mkey           VARCHAR,        -- normalized sorted molecule keys
+    notification   VARCHAR,
+    notified_on    DATE,
+    status         VARCHAR,        -- banned | restricted | stayed
+    source_url     VARCHAR,
+    dedupe_key     VARCHAR UNIQUE,
+    fetched_at     TIMESTAMP
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_docs START 1;
+CREATE TABLE IF NOT EXISTS reg_documents (   -- regulator notices/circulars/gazette/price orders
+    id           BIGINT DEFAULT nextval('seq_docs') PRIMARY KEY,
+    agency       VARCHAR,          -- CDSCO | NPPA | DoP | eGazette | MoHFW | PMBI | ...
+    doc_type     VARCHAR,
+    title        VARCHAR,
+    published_on DATE,
+    url          VARCHAR,
+    dedupe_key   VARCHAR UNIQUE,
+    fetched_at   TIMESTAMP
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_approvals START 1;
+CREATE TABLE IF NOT EXISTS reg_approvals (
+    id           BIGINT DEFAULT nextval('seq_approvals') PRIMARY KEY,
+    agency       VARCHAR,
+    drug_text    VARCHAR,
+    indication   VARCHAR,
+    approved_on  DATE,
+    applicant    VARCHAR,
+    approval_type VARCHAR,
+    source_url   VARCHAR,
+    molecule_ids VARCHAR,
+    dedupe_key   VARCHAR UNIQUE,
+    fetched_at   TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS jan_aushadhi (
+    drug_code     VARCHAR PRIMARY KEY,
+    name          VARCHAR,
+    unit_size     VARCHAR,
+    mrp           DOUBLE,
+    group_name    VARCHAR,
+    molecule_ids  VARCHAR,
+    fetched_at    TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS nlem (
+    molecule_name VARCHAR,
+    molecule_id   INTEGER,
+    section       VARCHAR,
+    level         VARCHAR,
+    dosage        VARCHAR,
+    edition       VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS usfda_actions (
+    id           VARCHAR PRIMARY KEY,
+    kind         VARCHAR,          -- warning_letter | import_alert | recall | 483
+    firm         VARCHAR,
+    country      VARCHAR,
+    subject      VARCHAR,
+    issued_on    DATE,
+    url          VARCHAR,
+    parent_id    INTEGER,
+    fetched_at   TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS quotes (
+    ticker       VARCHAR PRIMARY KEY,
+    name         VARCHAR,
+    price        DOUBLE,
+    prev_close   DOUBLE,
+    change_pct   DOUBLE,
+    day_high     DOUBLE,
+    day_low      DOUBLE,
+    volume       DOUBLE,
+    market_cap   DOUBLE,
+    pe           DOUBLE,
+    week52_high  DOUBLE,
+    week52_low   DOUBLE,
+    currency     VARCHAR,
+    quoted_at    TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS quote_history (
+    ticker VARCHAR,
+    d      DATE,
+    close  DOUBLE,
+    volume DOUBLE,
+    PRIMARY KEY (ticker, d)
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_news START 1;
+CREATE TABLE IF NOT EXISTS news (
+    id           BIGINT DEFAULT nextval('seq_news') PRIMARY KEY,
+    published_at TIMESTAMP,
+    source       VARCHAR,
+    title        VARCHAR,
+    url          VARCHAR UNIQUE,
+    summary      VARCHAR,
+    topic        VARCHAR,          -- regulatory | pricing | approval | recall | deal | earnings | litigation | supply | policy | general
+    parent_ids   VARCHAR,
+    molecule_ids VARCHAR,
+    fetched_at   TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS price_observations (  -- every price we ever saw, for history
+    product_id  INTEGER,
+    observed_on DATE,
+    mrp         DOUBLE,
+    source      VARCHAR,
+    PRIMARY KEY (product_id, observed_on, source)
+);
+
+CREATE TABLE IF NOT EXISTS shortages (
+    id           VARCHAR PRIMARY KEY,
+    region       VARCHAR,          -- US | IN
+    molecule_text VARCHAR,
+    company      VARCHAR,
+    status       VARCHAR,
+    reason       VARCHAR,
+    category     VARCHAR,
+    updated_on   DATE,
+    source       VARCHAR,
+    molecule_ids VARCHAR
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_runs START 1;
+CREATE TABLE IF NOT EXISTS connector_runs (
+    id          BIGINT DEFAULT nextval('seq_runs') PRIMARY KEY,
+    connector   VARCHAR,
+    started_at  TIMESTAMP,
+    finished_at TIMESTAMP,
+    status      VARCHAR,           -- ok | error | partial
+    rows_seen   INTEGER,
+    rows_new    INTEGER,
+    events_new  INTEGER,
+    message     VARCHAR
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_inv START 1;
+CREATE TABLE IF NOT EXISTS inventory_items (
+    id           BIGINT DEFAULT nextval('seq_inv') PRIMARY KEY,
+    list_name    VARCHAR,
+    raw_name     VARCHAR,
+    batch_no     VARCHAR,
+    qty          DOUBLE,
+    expiry       DATE,
+    product_id   INTEGER,
+    match_score  DOUBLE,
+    added_at     TIMESTAMP
+);

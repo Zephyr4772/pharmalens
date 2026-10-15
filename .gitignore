@@ -1,0 +1,9 @@
+data/
+!data/README.md
+.env
+__pycache__/
+*.pyc
+node_modules/
+web/dist/
+*.tsbuildinfo
+.venv/
