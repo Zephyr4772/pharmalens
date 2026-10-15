@@ -1,40 +1,31 @@
-# PharmaLens v4 — work-in-progress handoff
+# PharmaLens v4: handoff
 
-Paused 2026-10-15 for a PC restart. Everything below is committed in git (`D:\pharmacopy\pharmalens`).
+Last updated 2026-10-15. All work is committed in git at `D:\pharmacopy\pharmalens`. See README.md and docs/METHODOLOGY.md.
 
-## What exists and works
-- **Data** (`data/`, gitignored): Kaggle sources in `data/sources/kaggle/` (Indian Medicine Master Dataset Sept 2026 = spine,
-  1mg 2025 scrape = newer MRPs/in-stock), legacy JSON in `data/sources/legacy/`, DuckDB at `data/pharmalens.duckdb`.
-- **Core build**: `cd backend && py -3 -m pharmalens.pipeline.build_core` (~40 s): 543k SKUs, 6.9k molecules, 34k salt combos,
-  15.9k companies, 74 parent groups (`backend/pharmalens/seed/parents.json`). Rebuild drops only core tables.
-- **Connectors** (`backend/pharmalens/connectors/`, run `py -3 -m pharmalens.connectors list|run <name>|run all`):
-  cdsco_nsq, nsq_mirror (Health Master, post-Aug-2025 months), banned_fdc, cdsco_gazette, cdsco_alerts, nppa_orders,
-  jan_aushadhi (guest-token API), nse_quotes, nse_fundamentals, pharma_news, openfda_recalls. All ran OK; DB is populated
-  (4.2k NSQ batches to 2026-08, 690 ban notifications, 2.4k Jan Aushadhi, 2k regulator docs, quotes, news).
-- **Derived** (`derived.py`): product-level ban matching (strength + dosage-form aware; ban_level exact/review),
-  market-share estimate (MRP × availability × listing reach, rolled up to parent group) + HHI → `segment_share`, `segment_stats`.
-- **API**: FastAPI `pharmalens.api.main:app` (routers: catalog, market, regulatory, live incl. SSE `/stream`, shelf).
-  Scheduler runs in-process. Launch config: `D:\pharmacopy\.claude\launch.json` → name `pharmalens` (port 8000).
-  All endpoints smoke-tested 200 and <300 ms.
-- **Web** (`web/`, React+TS+Vite): shell + screens written: Market, Regulatory, Shelf, Screener, Molecules, MoleculeDetail,
-  Combos, ComboDetail, Groups, GroupDetail, CompanyDetail, ProductDetail; components ui.tsx, Share.tsx, Dossier.tsx.
+## State
+- **Working end to end**:
+  - Catalog build
+  - 12 connectors (all OK)
+  - Derived ban matching and market share
+  - FastAPI with SSE
+  - All 11 terminal screens + detail pages, verified in the browser pane
+- **Launch config**: `D:\pharmacopy\.claude\launch.json` → `pharmalens` (port 8000; serves `web/dist`). A copy is at `.claude/launch.root.json`.
+- **DrugSetu**: trial key in `.env`. 5 items per page, ~1 req/s, limited quota. The connector stops cleanly on quota errors.
+- **Catalog**: rebuilt after the last pattern change; nothing pending.
 
-## Remaining steps (in order)
-1. Write missing screens referenced by `web/src/App.tsx`: `Equities.tsx`, `News.tsx`, `Feeds.tsx` (connector health table from
-   `/meta/feeds` with "run now" → POST `/admin/connectors/{name}/run`, plus methodology section `#method`), `Watchlist.tsx`
-   (uses `state/watchlist.ts` items + `/events` filtered by entity).
-2. Add CSS for new classes used in screens: stack, tabs, pager, ev/ev-*, topic-*, kpi-*, b-mute, tape-warn, rail-dot, mkt-pill,
-   topbar-right, sb-link, note, banner(-crit/-warn), shelf-row/flag-*, code textarea, filebtn, row-gap, inline-bar, kv, news-row, tall, panel-right, sortable.
-3. `cd web && npm run build` → fix TS errors; server serves `web/dist`. Verify in browser pane (preview_start `pharmalens`).
-4. Fix build_core: `dosage_form` sometimes contains junk ("Strip Of 10 Tablet Sr…") — re-derive from name when it contains "strip of"/"bottle of".
-5. Write `docs/METHODOLOGY.md` + README (sources, cadence, market-share method, ban-matching caveats: court stays not tracked).
-6. Next connectors: CDSCO approved new drugs / SEC minutes, NLEM 2022 PDF → molecules.is_nlem, NPPA 2026 price compendium
-   (encrypted HIS dashboard; try via browser), CTRI trials, e-pharmacy price refresh scraper, USFDA warning letters/import alerts.
-7. DrugSetu: docs need a dashboard login; API keys are in `.env` (gitignored). Need the user to export the OpenAPI JSON
-   from https://app.drugsetu.com/app/docs (logged in) to wire it up.
+## Next candidates
+1. More government feeds:
+   - CDSCO approved new drugs and SEC meeting minutes (CDSCO "Approval_new" / cdscoonline `cdscoAppDrugs`)
+   - NLEM 2022 PDF → `molecules.is_nlem`
+   - CTRI trials
+2. NPPA 2026 price compendium: encrypted HIS dashboard. Try capturing its XHR through the browser pane.
+3. OCR for scanned CDSCO NSQ PDFs (0-row months listed in the feed note).
+4. E-pharmacy price refresh beyond DrugSetu, within rate limits. Court-stay tracking for bans.
+5. Alerts: email or Telegram notification when an event matches the watchlist or a saved SHELF list.
+6. USFDA warning letters and import alerts (fda.gov blocks curl; needs the browser or the FDA data dashboard).
 
 ## Gotchas
-- DuckDB is single-writer: stop the server before `build_core`; CLI connector runs delegate to the server if it is up.
-- DDL must run outside transactions (see `derived.migrate()`).
-- Bash heredocs with apostrophes break in this environment — write scripts to files instead.
-- Never kill python by image name; stop the server via preview_stop or its PID.
+- **DuckDB is single-writer.** Stop the server before `build_core`. CLI connector runs delegate to the server when it is up.
+- **No DDL inside transactions.** See `derived.migrate()`. `db.get_conn()` applies `schema.sql` (IF NOT EXISTS) on start.
+- **Don't edit source through the shell.** Inline `py -c` and heredocs mangle `\b` and apostrophes in this environment, so write patch scripts to files.
+- **Stopping the server.** Never kill python by image name. Use `preview_stop` or the server's PID.
