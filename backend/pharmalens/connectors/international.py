@@ -67,7 +67,7 @@ class OpenFdaBulk(Connector):
             if not name:
                 return None
             if name not in parent_cache:
-                parent_cache[name] = matcher.parent_for(name)
+                parent_cache[name] = matcher.parent_for(name, region="global")
             return parent_cache[name]
 
         app_rows = []
@@ -171,7 +171,7 @@ class WhoPrequal(Connector):
                 except ValueError:
                     pass
                 inn = x.get("INN, Dosage Form and Strength")
-                pid = matcher.parent_for(x.get("Applicant"))
+                pid = matcher.parent_for(x.get("Applicant"), region="global")
                 w.execute("INSERT INTO who_pq VALUES (?,?,?,?,?,?,?,?,?,?)",
                           [ref, inn, x.get("Product Type"), x.get("Therapeutic Area"), x.get("Applicant"), x.get("Dosage Form"),
                            x.get("Basis of Listing"), when, pid, mids_for([inn])])
@@ -203,7 +203,7 @@ class EmaMedicines(Connector):
         keep = {c: c for c in df.columns}
         holder_col = next((c for c in df.columns if "marketing_authorisation" in c and ("holder" in c or "developer" in c)), None)
         inn_col = next((c for c in df.columns if "international_non_proprietary" in c or c.startswith("active_substance")), None)
-        df["parent_id"] = [matcher.parent_for(str(h)) if holder_col and isinstance(h, str) else None
+        df["parent_id"] = [matcher.parent_for(str(h), region="global") if holder_col and isinstance(h, str) else None
                            for h in (df[holder_col] if holder_col else [None] * len(df))]
         df["molecule_ids"] = [mids_for([str(x)]) if isinstance(x, str) else None for x in (df[inn_col] if inn_col else [None] * len(df))]
         df = df.astype(object).where(pd.notna(df), None)

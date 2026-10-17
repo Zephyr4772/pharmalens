@@ -29,7 +29,7 @@ def enrichment(cur, mid: int) -> dict | None:
     if not e:
         return None
     e = e[0]
-    for k in ("atc", "mechanisms", "indications", "faers_top", "us_label", "us_label_meta"):
+    for k in ("atc", "mechanisms", "indications", "faers_top", "us_label", "us_label_meta", "faers_co", "faers_names", "chembl_ambiguous"):
         if isinstance(e.get(k), str):
             e[k] = json.loads(e[k])
     return e

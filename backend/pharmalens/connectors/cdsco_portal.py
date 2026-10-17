@@ -166,7 +166,7 @@ class CdscoApprovalsDb(_Portal):
                 comp = fix_mojibake((r.get("str_composition") or "").strip())
                 division = DIVISIONS.get(r.get("num_division_id"), str(r.get("num_division_id")))
                 sites = [s.strip() for s in re.split(r"<br\s*/?>", r.get("manuf_addr") or "") if s.strip()]
-                mids = matcher.molecules_in(f"{drug} {comp}", limit=8)
+                mids = matcher.actives_in(drug, comp)
                 applicant = fix_mojibake((r.get("str_man_unit_name") or "").strip())
                 w.execute("""INSERT INTO reg_approvals (agency, drug_text, indication, approved_on, applicant, approval_type, source_url,
                              molecule_ids, dedupe_key, fetched_at, composition, dosage_form, sites, division, applied_for, form_id)

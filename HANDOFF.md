@@ -13,7 +13,8 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
     - State procurement: TNMSC (17 tender pages, 5,962 supplier rates with order share) and RMSCL (2,042 contracts)
     - International: openFDA bulk (29k applications, 49k Orange Book, 20k patents, 138k NDC), WHO PQ (655), EMA (2,754), FDA Import Alert 66-40 (467 firms, 110 India), WHO product alerts (82)
     - NSE filings (42,666 announcements across tracked groups)
-    - Molecule enrichment (ChEMBL + openFDA label + FAERS): 400 of 3,062 molecules done; ~120/run without a key, 4 runs/day
+    - Molecule enrichment (ChEMBL + openFDA label + FAERS): all 3,097 molecules with 3+ SKUs, strict single-ingredient matching, PRR + co-reported drugs (OPENFDA_API_KEY set)
+  - Integrity pass (2026-10-18, see METHODOLOGY 'Catalog integrity'): molecule repair (6,871 → 5,155 molecules), stable ids via `id_registry`, strict company matching, region-aware parent patterns, approvals linked by name only
   - New panels: molecule (pharmacology, FAERS, US label, procurement, global registrations, CDCI), product (procurement benchmark, brand registry, pharmacology), combo (procurement), group (filings, US/WHO footprint, tenders, licences), company (tenders, licences)
   - Derived ban matching and market share
   - FastAPI with SSE
@@ -24,7 +25,7 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
 - **Catalog**: rebuilt after the last pattern change; nothing pending.
 
 ## Next candidates
-0. Get a free `OPENFDA_API_KEY` (open.fda.gov) into `.env`: molecule enrichment then finishes in one run instead of ~6 days. Register at nrces.in for official CDCI files (`CDCI_BASE_URL`).
+0. Register at nrces.in for official CDCI files (`CDCI_BASE_URL`). Review leftover one-product junk molecules (e.g. brand glued to a molecule: 'Vensat Bioamoxycillin').
 1. CTRI direct (search is CAPTCHA-protected; currently via ClinicalTrials.gov cross-registration). SEC rows from committees with non-standard tables (~107 'other').
 2. OCR for scanned CDSCO NSQ PDFs (0-row months listed in the feed note).
 3. E-pharmacy price refresh beyond DrugSetu, within rate limits. Court-stay tracking for bans.
@@ -36,6 +37,8 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
 - **DuckDB is single-writer.** Stop the server before `build_core`. CLI connector runs delegate to the server when it is up.
 - **No DDL inside transactions.** See `derived.migrate()`. `db.get_conn()` applies `schema.sql` (IF NOT EXISTS) on start.
 - **Don't edit source through the shell.** Inline `py -c` and heredocs mangle `\b` and apostrophes in this environment, so write patch scripts to files.
+- **Disk and memory.** A catalog build peaks at several GB of RAM (product_info step). DuckDB spills to `data/duckdb_tmp` and is capped at 3 GB (`PHARMALENS_DUCKDB_MEMORY`), but Python itself can still push Windows to grow `C:\pagefile.sys`. Close heavy apps before `build_core`, and run with `TEMP=D:\pharmacopy\tmp`. C: had under 10 GB free on 2026-10-18.
+- **Never interrupt build_core casually.** It drops the core tables first. The ids survive in `id_registry`, but the catalog is empty until a build completes. Backups are in `data/backup_*`.
 - **Connector CLI output is buffered** when redirected to a file: the JSON result lines appear only when the process exits.
 - **CDCI files** have trailing tabs; read with `index_col=False` or every column shifts by one.
 - **Stopping the server.** Never kill python by image name. Use `preview_stop` or the server's PID.

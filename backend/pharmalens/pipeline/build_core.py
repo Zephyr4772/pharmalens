@@ -22,6 +22,8 @@ from datetime import date, datetime, timezone
 
 import duckdb
 
+from ..molecule_repair import MoleculeRepair
+from ..config import duckdb_settings
 from ..config import DB_PATH, LEGACY_DIR, MASTER_DIR, ONEMG_2025_CSV, SCHEMA_VERSION, SEED_DIR
 from ..normalize import (
     molecule_key, norm, norm_company, norm_product, norm_strength, pack_quantity,
@@ -198,6 +200,7 @@ def build():
     t0 = time.time()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(DB_PATH))
+    duckdb_settings(con)
     # official NPPA compendium rows (written by the nppa_compendium connector) survive rebuilds
     official_nppa = []
     try:
@@ -205,6 +208,22 @@ def build():
                                        FROM nppa_ceiling WHERE source LIKE 'NPPA compendium%'""").fetchall()
     except duckdb.CatalogException:
         pass
+    # ids already issued: live tables, watchlists and alerts reference them, so keys keep their ids
+    con.execute("""CREATE TABLE IF NOT EXISTS id_registry (kind VARCHAR, key VARCHAR, id INTEGER,
+                   first_seen TIMESTAMP DEFAULT current_timestamp, PRIMARY KEY (kind, key))""")
+    for kind, sql in [("molecule", "SELECT mkey, id FROM molecules"), ("company", "SELECT name_norm, id FROM companies"),
+                      ("combo", "SELECT ckey, id FROM combos"), ("product", "SELECT name_norm, id FROM products")]:
+        try:
+            con.execute(f"INSERT OR IGNORE INTO id_registry (kind, key, id) SELECT '{kind}', k, i FROM ({sql}) t(k, i) WHERE k IS NOT NULL")
+        except duckdb.Error:
+            pass
+    reg = lambda kind: dict(con.execute("SELECT key, id FROM id_registry WHERE kind = ?", [kind]).fetchall())
+    old_mol, old_comp, old_combo, old_prod = reg("molecule"), reg("company"), reg("combo"), reg("product")
+    # keys present in the last build (molecules retired since then need their live references remapped)
+    try:
+        last_mol = dict(con.execute("SELECT mkey, id FROM molecules").fetchall()) or None
+    except duckdb.Error:
+        last_mol = None
     for t in CORE_TABLES:
         con.execute(f"DROP TABLE IF EXISTS {t}")
     con.execute((SEED_DIR.parent / "schema.sql").read_text())
@@ -354,15 +373,22 @@ def build():
 
     # ---- molecules + links
     log("linking molecules")
+    mm_rows = con.execute("SELECT medicine_id, molecule, strength FROM mm").fetchall()
+    repairer = MoleculeRepair(r[1] for r in mm_rows)
     mol_by_key: dict[str, dict] = {}
     links: list[tuple[int, str, str]] = []  # (pid, mkey, strength)
-    for mid, molecule, strength in con.execute("SELECT medicine_id, molecule, strength FROM mm").fetchall():
+    for mid, molecule, strength in mm_rows:
         pid = src_to_pid.get(mid)
-        k = molecule_key(molecule)
-        if not pid or not k:
+        if not pid:
             continue
-        mol_by_key.setdefault(k, {"name": display_name(molecule, k)})
-        links.append((pid, k, norm_strength(strength)))
+        names = repairer.repair(molecule)
+        for nm in names:
+            k = molecule_key(nm)
+            if not k:
+                continue
+            mol_by_key.setdefault(k, {"name": display_name(nm, k)})
+            # a strength belongs to the molecule only when the raw string named one molecule
+            links.append((pid, k, norm_strength(strength) if len(names) == 1 else ""))
     linked = {l[0] for l in links}
     for p in products:
         if p["id"] in linked:
@@ -372,11 +398,13 @@ def build():
         if not comp:
             continue
         for molname, strength in parse_composition(comp):
-            k = molecule_key(molname)
-            if not k or len(k) < 3:
-                continue
-            mol_by_key.setdefault(k, {"name": display_name(molname, k)})
-            links.append((p["id"], k, norm_strength(strength)))
+            names = repairer.repair(molname)
+            for nm in names:
+                k = molecule_key(nm)
+                if not k or len(k) < 3:
+                    continue
+                mol_by_key.setdefault(k, {"name": display_name(nm, k)})
+                links.append((p["id"], k, norm_strength(strength) if len(names) == 1 else ""))
     # dedupe links per product
     seen = set()
     uniq_links = []
@@ -386,8 +414,8 @@ def build():
         seen.add((l[0], l[1]))
         uniq_links.append(l)
     links = uniq_links
-    mol_ids = {k: i + 1 for i, k in enumerate(sorted(mol_by_key))}
-    log(f"molecules: {len(mol_ids):,}, links: {len(links):,}")
+    mol_ids = stable_ids(sorted(mol_by_key), old_mol)
+    log(f"molecules: {len(mol_ids):,}, links: {len(links):,}; repairs: {dict(repairer.stats)}")
 
     # ---- combos
     per_product = defaultdict(list)
@@ -413,6 +441,12 @@ def build():
         p = prod_by_id[pid]
         p["combo_id"] = combo_ids[ckey]
         p["molecule_count"] = len(parts)
+
+    seq_to_ckey = {v: k for k, v in combo_ids.items()}
+    combo_ids = stable_ids(sorted(combo_ids), old_combo)
+    for p in products:
+        if p.get("combo_id"):
+            p["combo_id"] = combo_ids[seq_to_ckey[p["combo_id"]]]
 
     # ---- class propagation: molecule class = mode of its products' classes
     mol_class = defaultdict(Counter)
@@ -442,7 +476,7 @@ def build():
     # ---- parents + companies
     log("resolving companies")
     parents_seed = json.loads((SEED_DIR / "parents.json").read_text(encoding="utf-8"))
-    parent_rx = [(i + 1, [re.compile(pt) for pt in p["patterns"]]) for i, p in enumerate(parents_seed)]
+    parent_rx = [(i + 1, [re.compile(pt) for pt in p["patterns"] + p.get("india_patterns", [])]) for i, p in enumerate(parents_seed)]
     companies: dict[str, dict] = {}
     for p in products:
         raw = p["manufacturer_raw"]
@@ -465,8 +499,15 @@ def build():
             companies[ck] = c
         c["names"][raw.strip()] += 1
         p["company_id"] = c["id"]
+    comp_ids = stable_ids(sorted(companies), old_comp)
+    seq_to_comp = {c["id"]: ck for ck, c in companies.items()}
+    for ck, c in companies.items():
+        c["id"] = comp_ids[ck]
+    for p in products:
+        if p.get("company_id"):
+            p["company_id"] = comp_ids[seq_to_comp[p["company_id"]]]
     slugs = set()
-    for c in companies.values():
+    for c in sorted(companies.values(), key=lambda c: c["id"]):
         c["name"] = c["names"].most_common(1)[0][0]
         s = slugify(c["name"])
         if s in slugs:
@@ -474,6 +515,20 @@ def build():
         slugs.add(s)
         c["slug"] = s
     log(f"companies: {len(companies):,}; with parent: {sum(1 for c in companies.values() if c['parent_id']):,}")
+
+    # ---- stable product ids (keyed by normalised name; a repeated name gets a fresh id)
+    prod_ids, seen_names, nxt = {}, set(), max(old_prod.values(), default=0) + 1
+    for p in products:
+        nn = p["name_norm"]
+        if nn in old_prod and nn not in seen_names:
+            new_id = old_prod[nn]
+        else:
+            new_id, nxt = nxt, nxt + 1
+        seen_names.add(nn)
+        prod_ids[p["id"]] = new_id
+    for p in products:
+        p["id"] = prod_ids[p["id"]]
+    links = [(prod_ids[pid], k, st) for pid, k, st in links]
 
     # ---- write tables
     log("writing tables")
@@ -578,6 +633,13 @@ def build():
                    SELECT id, DATE '2024-08-01', mrp_legacy, 'catalog-2022-24' FROM products WHERE mrp_legacy IS NOT NULL""")
 
     load_legacy_regulatory(con, mol_ids)
+    remap_live_molecules(con, last_mol if last_mol is not None else old_mol, mol_ids, repairer)
+    for kind, ids in [("molecule", mol_ids), ("company", comp_ids), ("combo", combo_ids),
+                      ("product", {p["name_norm"]: p["id"] for p in products})]:
+        import pandas as pd
+        con.register("_ids", pd.DataFrame({"kind": kind, "key": list(ids.keys()), "id": list(ids.values())}))
+        con.execute("INSERT OR IGNORE INTO id_registry (kind, key, id) SELECT kind, key, id FROM _ids")
+        con.unregister("_ids")
 
     from .product_info import build as build_product_info
     build_product_info(con)
@@ -612,6 +674,75 @@ def build():
     con.execute("CHECKPOINT")
     con.close()
     log(json.dumps(meta, indent=1))
+
+
+def stable_ids(keys, old: dict) -> dict:
+    """Keep each key's previous id; new keys get ids above every id ever issued, so a retired id is never reused."""
+    nxt = max(old.values(), default=0) + 1
+    out = {}
+    for k in keys:
+        if k in old:
+            out[k] = old[k]
+        else:
+            out[k], nxt = nxt, nxt + 1
+    return out
+
+
+LIVE_MOLECULE_LISTS = ["reg_nsq", "news", "reg_approvals", "sec_items", "trials", "shortages", "jan_aushadhi", "procurement_rates",
+                       "us_applications", "us_orange_book", "us_patents", "us_ndc", "who_pq", "ema_medicines"]
+
+
+def remap_live_molecules(con, old_mol: dict, mol_ids: dict, repairer):
+    """Molecules merged or dropped by this build: point live references at the surviving molecule, or remove them."""
+    remap = {}
+    for k, oid in old_mol.items():
+        if k in mol_ids:
+            continue
+        targets = []
+        for nm in repairer.repair(k):
+            nk = molecule_key(nm)
+            if nk in mol_ids and mol_ids[nk] not in targets:
+                targets.append(mol_ids[nk])
+        remap[oid] = targets
+    if not remap:
+        return
+    tables = {r[0] for r in con.execute("SELECT table_name FROM information_schema.columns WHERE column_name = 'molecule_ids'").fetchall()}
+    changed = Counter()
+    for t in LIVE_MOLECULE_LISTS:
+        if t not in tables:
+            continue
+        for (val,) in con.execute(f"SELECT DISTINCT molecule_ids FROM {t} WHERE molecule_ids IS NOT NULL AND molecule_ids <> ''").fetchall():
+            ids = [int(x) for x in str(val).split(",") if x.strip().isdigit()]
+            if not any(i in remap for i in ids):
+                continue
+            new = []
+            for i in ids:
+                for j in (remap[i] if i in remap else [i]):
+                    if j not in new:
+                        new.append(j)
+            con.execute(f"UPDATE {t} SET molecule_ids = ? WHERE molecule_ids = ?", [",".join(map(str, new)) or None, val])
+            changed[t] += 1
+    for t, col in [("nlem", "molecule_id"), ("cdci_substance", "molecule_id")]:
+        try:
+            for oid, targets in remap.items():
+                con.execute(f"UPDATE {t} SET {col} = ? WHERE {col} = ?", [targets[0] if len(targets) == 1 else None, oid])
+        except duckdb.CatalogException:
+            pass
+    try:
+        for oid, targets in remap.items():
+            keep = targets[0] if len(targets) == 1 else None
+            if keep is None or con.execute("SELECT count(*) FROM molecule_enrichment WHERE molecule_id = ?", [keep]).fetchone()[0]:
+                con.execute("DELETE FROM molecule_enrichment WHERE molecule_id = ?", [oid])
+            else:
+                con.execute("UPDATE molecule_enrichment SET molecule_id = ? WHERE molecule_id = ?", [keep, oid])
+    except duckdb.CatalogException:
+        pass
+    for oid, targets in remap.items():
+        con.execute("UPDATE events SET entity_id = ? WHERE entity_type = 'molecule' AND entity_id = ?",
+                    [targets[0] if len(targets) == 1 else None, oid])
+    merged = sum(1 for v in remap.values() if v)
+    log(f"live references: {len(remap):,} retired molecule ids ({merged:,} merged, {len(remap) - merged:,} dropped); "
+        f"rewritten value groups: {dict(changed)}")
 
 
 def load_legacy_regulatory(con, mol_ids):

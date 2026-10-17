@@ -43,7 +43,7 @@ class OpenFdaIndiaRecalls(Connector):
                     if cur.execute("SELECT 1 FROM usfda_actions WHERE id = ?", [rid]).fetchone():
                         continue
                     firm = x.get("recalling_firm")
-                    pid = matcher.parent_for(firm)
+                    pid = matcher.parent_for(firm, region="global")
                     issued = ymd(x.get("report_date"))
                     subject = f"{x.get('classification')}: {x.get('product_description', '')[:300]} — {x.get('reason_for_recall', '')[:300]}"
                     cur.execute("INSERT INTO usfda_actions VALUES (?,?,?,?,?,?,?,?, now())",

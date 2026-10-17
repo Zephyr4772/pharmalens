@@ -409,7 +409,7 @@ class ClinicalTrialsIndia(Connector):
                 if m not in mids:
                     mids.append(m)
         sponsor = spons.get("name")
-        pid = matcher.parent_for(sponsor) or (matcher.parents_in(sponsor or "") or [None])[0]
+        pid = matcher.parent_for(sponsor, region="global") or (matcher.parents_in(sponsor or "") or [None])[0]
         exists = w.execute("SELECT status FROM trials WHERE nct_id = ?", [nct]).fetchone()
         upd = status.get("lastUpdatePostDateStruct", {}).get("date")
         w.execute("INSERT OR REPLACE INTO trials VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, now())", [

@@ -149,7 +149,7 @@ class FdaImportAlert6640(Connector):
                 fid = "ia6640-" + norm(f["firm"] + " " + f["address"])[:120]
                 if fid in known:
                     continue
-                pid = matcher.parent_for(f["firm"])
+                pid = matcher.parent_for(f["firm"], region="global")
                 w.execute("INSERT OR REPLACE INTO usfda_actions VALUES (?,?,?,?,?,?,?,?, now())",
                           [fid, "import_alert", f["firm"], f["country"], f"Import Alert 66-40 (cGMP) — {f['address']}", f["published"], self.URL, pid])
                 self.stats.rows_new += 1

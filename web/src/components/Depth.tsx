@@ -38,13 +38,23 @@ export function Pharmacology({ e, compact = false }: { e: Row | null | undefined
             {(e.indications ?? []).length > 0 && <div className="chips">{e.indications.slice(0, compact ? 12 : 24).map((i: Row) => (
               <span key={i.term} className={`chip ${i.phase >= 4 ? "chip-on" : ""}`} title={`max phase ${i.phase}`}>{i.term}</span>))}</div>}
           </div>
-        ) : <div className="empty">no ChEMBL match</div>}
+        ) : <div className="empty">{e.chembl_ambiguous ? "name denotes a class or several compounds — not assigned" : "no ChEMBL match"}</div>}
       </Panel>
-      <Panel title="Most-reported adverse reactions" sub="US FAERS spontaneous reports — a signal, not incidence">
-        {faers.length ? faers.slice(0, compact ? 8 : 14).map((f) => <Bar key={f.term} label={f.term} value={f.count} max={max} text={num(f.count)} />)
-          : <div className="empty">no FAERS reports matched</div>}
+      <Panel title="Most-reported adverse reactions"
+        sub={`US FAERS · ${e.faers_total ? `${num(e.faers_total)} reports listing a single-ingredient product` : "spontaneous reports"} · reports, not incidence; the drug may be concomitant, not the cause`}>
+        {faers.length ? (
+          <>
+            {faers.slice(0, compact ? 8 : 14).map((f) => (
+              <Bar key={f.term} label={<span title={f.prr != null ? `PRR ${f.prr}: reported ${f.prr}× as often as across all FAERS` : ""}>{f.term}</span>}
+                value={f.count} max={max} tone={f.signal ? "down" : ""}
+                text={`${num(f.count)}${f.prr != null ? ` · PRR ${f.prr}` : ""}${f.signal ? " ▲" : ""}`} />))}
+            {(e.faers_co ?? []).length > 0 && (
+              <div className="faint" style={{ marginTop: 6 }}>Often co-reported: {e.faers_co.slice(0, 6).map((c: Row) => `${c.drug} ${(c.share * 100).toFixed(0)}%`).join(" · ")}</div>)}
+            <div className="faint" style={{ marginTop: 4 }}>▲ signal = PRR ≥ 2 with ≥ 3 reports (Evans screening rule)</div>
+          </>
+        ) : <div className="empty">no FAERS reports for a single-ingredient US product</div>}
       </Panel>
-      <Panel title="US prescribing label" sub={meta.generic ? `${meta.brand ?? meta.generic} · ${meta.manufacturer ?? ""} · ${meta.effective ? `${meta.effective.slice(0, 4)}-${meta.effective.slice(4, 6)}` : ""}` : "openFDA"}
+      <Panel title="US prescribing label" sub={meta.generic ? `${meta.brand ?? meta.generic} · ${meta.manufacturer ?? ""} · ${meta.product_type === "HUMAN OTC DRUG" ? "OTC monograph · " : ""}${meta.effective ? `${meta.effective.slice(0, 4)}-${meta.effective.slice(4, 6)}` : ""}` : "openFDA"}
         right={meta.set_id && <a href={meta.url} target="_blank" rel="noreferrer">DailyMed ›</a>}>
         {keys.length ? (
           <>
@@ -52,7 +62,7 @@ export function Pharmacology({ e, compact = false }: { e: Row | null | undefined
               <button key={k} className={`chip ${k === open ? "chip-on" : ""} ${k === "boxed_warning" ? "neg" : ""}`} onClick={() => setSec(k)}>{LABEL_TITLES[k]}</button>))}</div>
             <div className="label-text">{label[open]}</div>
           </>
-        ) : <div className="empty">no US label found</div>}
+        ) : <div className="empty">no single-ingredient US label (not marketed alone in the US, or a supplement)</div>}
       </Panel>
     </div>
   );

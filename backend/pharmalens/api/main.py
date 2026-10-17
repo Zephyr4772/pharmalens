@@ -56,5 +56,8 @@ if WEB_DIST.exists():
             return JSONResponse(status_code=404, content={"detail": "not found"})
         candidate = (WEB_DIST / full_path).resolve()
         if full_path and candidate.is_file() and str(candidate).startswith(str(WEB_DIST.resolve())):
-            return FileResponse(candidate)
-        return FileResponse(WEB_DIST / "index.html")
+            # hashed bundles never change; everything else is revalidated
+            immutable = full_path.startswith("assets/")
+            return FileResponse(candidate, headers={"Cache-Control": "public, max-age=31536000, immutable" if immutable else "no-cache"})
+        # the app shell must be revalidated, or a browser keeps running the previous build after an update
+        return FileResponse(WEB_DIST / "index.html", headers={"Cache-Control": "no-cache"})

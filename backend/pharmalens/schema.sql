@@ -477,5 +477,19 @@ CREATE TABLE IF NOT EXISTS procurement_rates (
 CREATE TABLE IF NOT EXISTS molecule_enrichment (
     molecule_id INTEGER PRIMARY KEY, chembl_id VARCHAR, atc JSON, max_phase DOUBLE, first_approval INTEGER,
     molecule_type VARCHAR, withdrawn BOOLEAN, black_box BOOLEAN, mechanisms JSON, indications JSON,
-    faers_top JSON, faers_total INTEGER, us_label JSON, us_label_meta JSON, us_name VARCHAR, fetched_at TIMESTAMP
+    faers_top JSON, faers_total INTEGER, us_label JSON, us_label_meta JSON, us_name VARCHAR, fetched_at TIMESTAMP,
+    faers_co JSON,              -- drugs most often co-reported in the same FAERS reports (confounding context)
+    faers_names JSON,           -- exact openFDA generic names counted as this molecule
+    chembl_ambiguous JSON       -- why no ChEMBL compound was assigned (class name / several candidates)
+);
+
+
+-- Every catalog id ever issued (never dropped by a rebuild): keys keep their ids across builds, even when a build
+-- is interrupted after dropping the core tables, and a retired id is never handed to a different entity
+CREATE TABLE IF NOT EXISTS id_registry (
+    kind VARCHAR,       -- molecule | company | combo | product
+    key  VARCHAR,       -- mkey | name_norm | ckey | name_norm
+    id   INTEGER,
+    first_seen TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (kind, key)
 );

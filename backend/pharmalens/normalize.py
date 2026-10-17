@@ -50,14 +50,30 @@ MOLECULE_ALIASES = {
     "ofloxacin": "ofloxacin",
     "ciprofloxacin hydrochloride": "ciprofloxacin",
     "vitamin c": "ascorbic acid",
-    "vitamin b12": "methylcobalamin",
+    # "vitamin b12" is not aliased: Indian labels use it for methylcobalamin and cyanocobalamin alike
     "caffeine anhydrous": "caffeine",
+    # vitamins written by code: only where the code names one compound
+    "vitamin d3": "cholecalciferol", "vit d3": "cholecalciferol", "cholecalciferol vit d3": "cholecalciferol",
+    "vitamin d3 cholecalciferol": "cholecalciferol", "cholecalciferol vitamin d3": "cholecalciferol",
+    "vitamin d2": "ergocalciferol", "vit d2": "ergocalciferol",
+    "vitamin b6": "pyridoxine", "vit b6": "pyridoxine", "vitamin b6 pyridoxine": "pyridoxine", "pyridoxine vitamin b6": "pyridoxine",
+    "pyridoxine vit b6": "pyridoxine", "pyridoxine vitb6": "pyridoxine", "pyridoxine hydrochloride vit b6": "pyridoxine",
+    "vitamin b1": "thiamine", "vit b1": "thiamine", "thiamine vitamin b1": "thiamine", "thiamine vitb1": "thiamine",
+    "vitamin b2": "riboflavin", "vit b2": "riboflavin", "vitamin b7": "biotin", "vit b7": "biotin", "vitamin b9": "folic acid",
+    "vitamin b3 nicotinic acid": "niacin", "nicotinic acid": "niacin", "nicotinamide": "niacinamide",
+    "niacinamide nicotinamide vit b3": "niacinamide", "niacinamide vit b3": "niacinamide",
+    "co enzyme q10": "coenzyme q10", "coenzyme q10 ubidecarenone": "coenzyme q10", "ubidecarenone": "coenzyme q10",
+    "omega 3 fatty acid": "omega 3 fatty acids",
+    "vitamin k2 7": "menaquinone 7", "vitamin k27": "menaquinone 7", "vitamin k2 7 menaquinone": "menaquinone 7",
+    "chiro": "d chiro inositol", "d chiro": "d chiro inositol",
 }
 SALT_SUFFIXES = (
     " hydrochloride", " hcl", " sodium", " potassium", " calcium", " magnesium",
     " maleate", " besylate", " besilate", " mesylate", " succinate", " tartrate",
     " citrate", " sulphate", " sulfate", " phosphate", " acetate", " fumarate",
     " hydrobromide", " dihydrate", " monohydrate", " trihydrate", " anhydrous",
+    " hemihydrate", " sesquihydrate", " propanediol", " tosylate", " oxalate", " dimaleate", " mesilate", " bisulphate",
+    " bisulfate", " erbumine", " meglumine", " dimeglumine", " hyclate", " pamoate", " embonate",
     " ip", " bp", " usp",
 )
 

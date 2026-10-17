@@ -11,6 +11,16 @@ DATA_DIR = REPO_ROOT / "data"
 SOURCES_DIR = DATA_DIR / "sources"
 RAW_DIR = DATA_DIR / "raw"  # archived connector responses, one folder per connector
 DB_PATH = Path(os.getenv("PHARMALENS_DB", DATA_DIR / "pharmalens.duckdb"))
+# DuckDB spills to disk next to the data (never the system drive) and is capped so a big build cannot exhaust RAM
+DUCKDB_TEMP = Path(os.getenv("PHARMALENS_DUCKDB_TEMP", DATA_DIR / "duckdb_tmp"))
+DUCKDB_MEMORY = os.getenv("PHARMALENS_DUCKDB_MEMORY", "3GB")
+
+
+def duckdb_settings(con):
+    DUCKDB_TEMP.mkdir(parents=True, exist_ok=True)
+    con.execute(f"SET temp_directory = '{DUCKDB_TEMP.as_posix()}'")
+    con.execute(f"SET memory_limit = '{DUCKDB_MEMORY}'")
+    con.execute("SET preserve_insertion_order = false")
 if not DB_PATH.is_absolute():
     DB_PATH = REPO_ROOT / DB_PATH
 

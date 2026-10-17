@@ -33,7 +33,7 @@
 | WHO | Prequalified medicines (CSV, Wed), medical product alerts (falsified / substandard, daily) | as listed | Alerts from the last 12 months become events |
 | EMA | EU medicines register (XLSX) | weekly (Wed) | Centralised authorisations |
 | NSE filings | NSE corporate announcements per listed group | hourly 09:50–18:50 | Topic-tagged (results, USFDA, M&A, plant actions) |
-| Molecule enrichment | ChEMBL REST; openFDA label and FAERS APIs | 4× daily, resumable | ATC, mechanism, indications by phase, boxed-warning flag; latest single-ingredient US label sections; top reported adverse reactions. Molecules with 3+ SKUs, largest first, refreshed after 45 days. Without `OPENFDA_API_KEY` about 120 molecules a run fit openFDA's 1,000 requests/day |
+| Molecule enrichment | ChEMBL REST; openFDA label and FAERS APIs | 4× daily, resumable | ATC, mechanism, indications by phase, boxed-warning flag; latest single-ingredient US label sections; top reported adverse reactions. Molecules with 3+ SKUs, largest first, refreshed after 45 days. Without `OPENFDA_API_KEY` about 120 molecules a run fit openFDA's 1,000 requests/day; with a key each run takes every remaining molecule, 8 at a time |
 
 Every connector run is recorded in `connector_runs`, and new rows become `events` that stream to the UI over SSE.
 
@@ -74,6 +74,34 @@ Court stays won by individual manufacturers are **not** tracked. Always confirm 
 - Molecules are extracted from the product text by longest n-gram match.
 - The SHELF check matches exact batch numbers, and requires the product name to be similar or the same marketer.
 - Some older CDSCO PDFs (mostly 2022–2023 revised lists) are scanned images and parse to 0 rows. They are listed in the feed note and would need OCR.
+
+## Catalog integrity
+
+- **Molecule repair** (`molecule_repair.py`). The master dataset carries a column-mangled composition format and OCR-style damage. A repair is accepted only when it produces words or names found undamaged elsewhere in the same data; anything unrecoverable is dropped rather than guessed. The 2026-10 audit found 1,834 of 13,432 distinct molecule strings affected:
+  - strengths parsed as molecules ("75MCG", "0MCG") are dropped;
+  - glued doses are stripped ("LACTULOSE-10GM", "PREGABALIN75MG", "HEPARIN-5000I.U");
+  - lost or misread letters are restored ("0ETA ARTEETHER" → beta-arteether, "0ODINE" → iodine, "YRIDOXINE" → pyridoxine);
+  - two molecules glued together are split ("ZINC-0ARNITINE" → zinc + carnitine), while single compounds stay whole ("POVIDONE-0ODINE");
+  - synonyms in parentheses are dropped and qualifiers kept ("Insulin (Human)");
+  - release descriptors ("Extended Release", "SR") are removed;
+  - salts and hydrates fold into the active (oxalate, hyclate, propanediol…), while esters stay distinct (axetil, dipropionate).
+  Vitamins written by code merge into the compound only where the code names one compound (D3 → cholecalciferol, B6 → pyridoxine). "Vitamin B12" is left as written, because Indian labels use it for both methylcobalamin and cyanocobalamin.
+- **Stable ids.** Product, company, molecule and combination ids are kept in `id_registry`, which a rebuild never drops. A key keeps its id across builds, even a build interrupted after the core tables were dropped. New keys get ids above every id ever issued, so a retired id never points at a different entity. When a molecule is merged or dropped, the build rewrites every live reference to it (NSQ, news, approvals, SEC, trials, shortages, Jan Aushadhi, procurement, US/WHO/EU tables, NLEM, CDCI, enrichment, events).
+- **Company links** (NSQ manufacturers, procurement suppliers, the brand registry, SEC firms) require the whole firm name.
+  - Legal words and true synonyms are folded (Pvt Ltd, Pharma = Pharmaceuticals, Labs = Laboratories).
+  - Descriptors are kept (Biotech, Healthcare, Remedies, Surgical): Hindustan Laboratories is not Hindustan Biotech, Cadila Healthcare is not Cadila Pharmaceuticals.
+  - Names cut at the legal suffix (addresses follow), "a unit/division of X" resolves to X, "formerly known as" names are tried, and PDF-split words are rejoined.
+  - A firm that matches no company stays unlinked; no prefix guessing.
+- **Parent groups by region.** Short forms mean different firms in Indian and foreign registries. A bare "Merck" is P&G Health (formerly Merck Ltd) on an Indian label but MSD (Merck & Co) at the FDA/EMA. A bare "Cadila" is Cadila Pharmaceuticals in India but Cadila Healthcare (Zydus) as an FDA sponsor. Sandoz (2023) and Organon (2021) are independent of Novartis and MSD.
+- **Approvals** link molecules from the product name only. The approved composition lists excipients (trehalose, polysorbate, water for injection), and a biologic not yet in the Indian catalog would otherwise link to its excipients.
+
+## Molecule enrichment matching
+
+Wrong data on a molecule page is worse than none, so every external match must be unambiguous:
+
+- **ChEMBL**: exact preferred name, then exact US name, then exact synonym. A synonym counts only if ChEMBL records it as an official name (INN, BAN, USAN, ATC, BNF, DCF, FDA, USP, EMA, Merck Index); trade-name and 'other' synonyms are ignored (they map coconut oil to emulsifying wax, propanolol to levopropranolol). If a synonym resolves to more than one parent compound, nothing is assigned. Data is pooled with the parent compound only when the two differ by a salt; a salt or complex that is a different active substance (silver sulfadiazine, polaprezinc, inosine pranobex, etamsylate) keeps its own indications, mechanism and US name. Names that denote a class or mixture in Indian labelling (vitamin K2, vitamin E, omega-3, probiotics, enzyme blends…) are never resolved. The ChEMBL parent's preferred name, usually the USAN, is then used to query openFDA (paracetamol → acetaminophen, salbutamol → albuterol).
+- **US label**: openFDA generic-name spellings are listed first. A spelling counts only if, after removing salts, doses and dosage-form words, it is exactly one ingredient with the molecule's key. Combination and multi-ingredient labels are never used. Among the matching labels, prescription labels and those with more sections win, then the newest. Molecules marketed in the US only in combinations (artemether, sacubitril, tazobactam…) or only as supplements (cholecalciferol) show no label.
+- **FAERS**: counts come from reports listing a single-ingredient product of the molecule, with the same name rule. Each reaction carries a PRR against all of FAERS, flagged as a signal when PRR ≥ 2 with ≥ 3 reports (Evans screening rule). FAERS cannot tie a reaction to one drug in a multi-drug report, so the most co-reported drugs are shown alongside; a reaction driven by a frequent co-medication (e.g. kidney injury in reports that also list omeprazole) is visible as such.
 
 ## Known limitations
 

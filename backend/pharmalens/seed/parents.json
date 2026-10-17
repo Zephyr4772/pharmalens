@@ -47,6 +47,10 @@
    "^cadila healthcare",
    "^german remedies",
    "^biochem( |$)"
+  ],
+  "global_patterns": [
+   "^cadila$",
+   "^cadila hlthcare"
   ]
  },
  {
@@ -55,8 +59,11 @@
   "hq": "Ahmedabad",
   "ownership": "indian_private",
   "patterns": [
-   "^cadila$",
-   "^cadila pharmaceuticals"
+   "^cadila pharmaceuticals",
+   "^cadila pharms?\\b"
+  ],
+  "india_patterns": [
+   "^cadila$"
   ]
  },
  {
@@ -165,8 +172,7 @@
   "hq": "Mumbai",
   "ownership": "mnc_subsidiary",
   "patterns": [
-   "^novartis\\b",
-   "^sandoz\\b"
+   "^novartis\\b"
   ]
  },
  {
@@ -186,7 +192,9 @@
   "ownership": "mnc_subsidiary",
   "patterns": [
    "^procter\\b",
-   "^p g health",
+   "^p g health"
+  ],
+  "india_patterns": [
    "^merck$"
   ]
  },
@@ -196,8 +204,12 @@
   "hq": "Mumbai",
   "ownership": "mnc_private",
   "patterns": [
-   "^msd\\b",
-   "^organon\\b"
+   "^msd\\b"
+  ],
+  "global_patterns": [
+   "^merck$",
+   "^merck (and |& )?co\\b",
+   "^merck sharp"
   ]
  },
  {
