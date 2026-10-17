@@ -6,7 +6,7 @@
 |---|---|---|---|
 | Catalog | Indian Medicine Master Dataset (Kaggle, Sept 2026; 17 merged sets from 1mg, Apollo, Netmeds, NPPA) | rebuild on demand | 543k products, joined on normalised name |
 | 2025 prices | 1mg scrape (Kaggle `apkaayush`, 2025) | static | Newer MRP, Rx flag, in-stock flag for ~251k products |
-| DrugSetu | api.drugsetu.com | every 6 h + on product view | Live MRP per pack, safety profile; newest-first list = launch feed. Trial: 5 items/page, ~1 req/s, capped quota |
+| DrugSetu | api.drugsetu.com | every 6 h + on product view; full-catalog harvest every 30 min until complete | Live MRP per pack, safety profile; newest-first list = launch feed. Every record fetched is kept permanently in `drugsetu_products` and in `data/sources/drugsetu/*.jsonl.gz`, merged into the catalog on rebuild, and served as a labelled saved copy when the API is unavailable. Trial: 5 items/page, ~1 req/s, capped quota |
 | CDSCO NSQ / spurious | cdsco.gov.in NSQ archive | daily 09:10 | Monthly central + state lab PDFs, parsed to batch level |
 | NSQ mirror | thehealthmaster.com | daily 09:40 | CDSCO moved NSQ to a new portal in Aug 2025; later months come from republished CDSCO PDFs, labelled "via mirror" |
 | Prohibited FDCs | cdsco.gov.in Drugs › FDC | daily 09:00 | Every Section 26A notification since 1983 (690 entries) |

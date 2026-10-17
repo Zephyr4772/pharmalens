@@ -285,6 +285,45 @@ def build():
         added_2025 += 1
     log(f"products: {len(products):,} (2025 matched {matched_2025:,}, 2025-only added {added_2025:,})")
 
+    # ---- DrugSetu records saved locally (live-table copy; survives rebuilds and API expiry)
+    ds_matched = ds_added = 0
+    has_ds = con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'drugsetu_products'").fetchone()[0]
+    if has_ds:
+        for (name, nn, comp, mfr, mrp, packaging, form, tclass, aclass, cclass, habit, fetched) in con.execute(
+                """SELECT name, name_norm, composition, marketing_company, mrp, packaging, product_form, therapeutic_class,
+                          action_class, chemical_class, habit_forming, fetched_at
+                   FROM drugsetu_products WHERE coalesce(product_type, 'drug') = 'drug' AND name_norm IS NOT NULL""").fetchall():
+            asof = f"drugsetu {fetched:%Y-%m-%d}" if fetched else "drugsetu"
+            pid = by_norm.get(nn)
+            if pid:
+                p = products[pid - 1]
+                if mrp:
+                    p["mrp"], p["mrp_asof"] = mrp, asof
+                    if packaging:
+                        p["pack_size"] = packaging
+                p["manufacturer_raw"] = p["manufacturer_raw"] or mfr
+                p["composition"] = p["composition"] or comp
+                p["therapeutic_class"] = p["therapeutic_class"] or tclass
+                p["action_class"] = p["action_class"] or aclass
+                p["chemical_class"] = p["chemical_class"] or cclass
+                if "drugsetu" not in p["sources"]:
+                    p["sources"] += ",drugsetu"
+                    p["source_count"] += 1
+                ds_matched += 1
+            else:
+                pid = len(products) + 1
+                products.append({
+                    "id": pid, "src_id": None, "name": name, "name_norm": nn, "manufacturer_raw": clean_mfr(mfr),
+                    "dosage_form": form, "pack_size": packaging, "mrp": mrp, "mrp_asof": asof if mrp else None,
+                    "mrp_legacy": None, "composition": comp, "rx_required": None, "is_discontinued": False, "in_stock": None,
+                    "therapeutic_class": tclass, "action_class": aclass, "chemical_class": cclass, "habit_forming": habit,
+                    "uses": None, "side_effects": None, "image_url": None, "source_count": 1, "sources": "drugsetu",
+                    "indication_group": None,
+                })
+                by_norm[nn] = pid
+                ds_added += 1
+        log(f"drugsetu: refreshed {ds_matched:,} products, added {ds_added:,} new")
+
     # dosage form fallback from name
     FORMS = ["tablet", "capsule", "syrup", "suspension", "injection", "cream", "gel", "ointment", "drop",
              "lotion", "powder", "solution", "inhaler", "respules", "spray", "soap", "shampoo", "sachet",

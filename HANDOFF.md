@@ -12,7 +12,7 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
   - All 13 terminal screens (incl. PIPE, ALERT) + detail pages, verified in the browser pane
 - **Launch config**: `D:\pharmacopy\.claude\launch.json` → `pharmalens` (port 8010; serves `web/dist`). A copy is at `.claude/launch.root.json`.
 - **Alert channels**: Telegram and email need `TELEGRAM_BOT_TOKEN` / `SMTP_*` in `.env`; webhooks and the inbox work without setup. Dispatcher tested end to end with a local webhook; Telegram/SMTP not tested against real accounts.
-- **DrugSetu**: trial key in `.env`. 5 items per page, ~1 req/s, limited quota. The connector stops cleanly on quota errors.
+- **DrugSetu**: trial key in `.env` (5 items/page, ~1 req/s, limited quota). `drugsetu_harvest` copies the full catalog (resumable cursor in `drugsetu_state`) into `drugsetu_products` + `data/sources/drugsetu/*.jsonl.gz`; build_core merges it into the catalog; product pages fall back to the saved copy. On quota/auth refusal the API is paused 6 h (`drugsetu_state.paused_until`).
 - **Catalog**: rebuilt after the last pattern change; nothing pending.
 
 ## Next candidates

@@ -18,7 +18,8 @@ function LivePanel({ id, catalogUnit }: { id: number; catalogUnit: number | null
   const liveUnit = pk ? pk.mrp / Number(pk.qty) : null;
   const delta = liveUnit && catalogUnit ? ((liveUnit / catalogUnit - 1) * 100) : null;
   return (
-    <Panel title="Live listing" sub={`DrugSetu · fetched ${day(l.fetched_at)}`}>
+    <Panel title={l.stale ? "DrugSetu listing (saved copy)" : "Live listing"}
+      sub={l.stale ? `saved ${day(l.fetched_at)} · live API unavailable, showing the stored record` : `DrugSetu · fetched ${day(l.fetched_at)}`}>
       <div className="grid cols-2">
         <div>
           <table className="tt"><thead><tr><th>Pack</th><th>Form</th><th className="num">MRP now</th></tr></thead>

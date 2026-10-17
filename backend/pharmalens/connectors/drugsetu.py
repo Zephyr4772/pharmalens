@@ -7,16 +7,17 @@ on demand (live MRP per pack + safety profile) through `lookup()`.
 The key's plan caps page size (5 on trial), rate (~1 req/s) and monthly quota, so every
 call goes through one throttled client and the scan stops early on 429/403.
 """
+import gzip
 import json
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 
 from .. import db, matcher
-from ..config import DRUGSETU_API_KEY
+from ..config import DATA_DIR, DRUGSETU_API_KEY
 from ..normalize import norm
 from .base import Connector
 
@@ -99,19 +100,121 @@ def lookup(product_id: int) -> dict | None:
     p = db.one(cur, "SELECT name, name_norm FROM products WHERE id = ?", [product_id])
     if not p:
         return None
+    # last saved copy, however old — used whenever the API is unavailable (trial over, quota, outage)
+    cached = db.one(cur, """SELECT * FROM drugsetu_products WHERE catalog_product_id = ? OR name_norm = ?
+                            ORDER BY fetched_at DESC LIMIT 1""", [product_id, p["name_norm"]])
+    if api_paused():
+        return {**cached, "stale": True} if cached else None
     try:
         hits = call("/v1/products/search", q=p["name"][:100], type="drug") or []
         hit = next((h for h in hits if norm(h["product_name"]) == p["name_norm"]), None)
-        if not hit:
-            return None
-        detail = call(f"/v1/products/{hit['product_id']}")
-    except QuotaExhausted:
-        return None
+        detail = call(f"/v1/products/{hit['product_id']}") if hit else None
+    except QuotaExhausted as e:
+        pause_api(str(e))
+        detail = None
+    except httpx.HTTPError:
+        detail = None
     if not detail:
-        return None
+        return {**cached, "stale": True} if cached else None
     with db.writer() as w:
         upsert(w, detail)
+        archive_records([detail])
     return db.one(db.cursor(), "SELECT * FROM drugsetu_products WHERE product_id = ?", [detail["product_id"]])
+
+
+# ------------------------------------------------------------------ durable archive + quota pause
+ARCHIVE_DIR = DATA_DIR / "sources" / "drugsetu"
+
+
+def archive_records(records: list[dict]) -> None:
+    """Append raw API records to a dated gzip JSONL file: an API-independent copy of everything fetched."""
+    if not records:
+        return
+    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+    path = ARCHIVE_DIR / f"products-{datetime.now():%Y%m%d}.jsonl.gz"
+    with gzip.open(path, "at", encoding="utf-8") as f:
+        for r in records:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+
+def _state(key: str) -> str | None:
+    r = db.cursor().execute("SELECT value FROM drugsetu_state WHERE key = ?", [key]).fetchone()
+    return r[0] if r else None
+
+
+def _set_state(key: str, value: str | None) -> None:
+    with db.writer() as w:
+        if value is None:
+            w.execute("DELETE FROM drugsetu_state WHERE key = ?", [key])
+        else:
+            w.execute("INSERT OR REPLACE INTO drugsetu_state VALUES (?, ?)", [key, value])
+
+
+def pause_api(reason: str, hours: int = 6) -> None:
+    """After a quota/auth refusal, stop calling the API for a while instead of hammering it."""
+    _set_state("paused_until", (datetime.now() + timedelta(hours=hours)).isoformat())
+    _set_state("paused_reason", reason[:300])
+
+
+def api_paused() -> bool:
+    if not DRUGSETU_API_KEY:
+        return True
+    until = _state("paused_until")
+    return bool(until and datetime.fromisoformat(until) > datetime.now())
+
+
+class DrugSetuHarvest(Connector):
+    """Pulls DrugSetu's whole approved catalog, page by page, resuming where it stopped.
+    Everything lands in drugsetu_products and in data/sources/drugsetu/*.jsonl.gz, so the data
+    stays usable after the API key lapses."""
+    name = "drugsetu_harvest"
+    title = "DrugSetu Catalog Harvest"
+    agency = "DrugSetu API"
+    schedule = {"trigger": "interval", "minutes": 30}
+    description = "Resumable full-catalog copy of DrugSetu (all product fields) into the local database and gzip JSONL archive."
+    max_pages_per_run = 1400   # ~28 min at the trial rate limit; the next run continues from the saved cursor
+
+    def run(self):
+        if _state("harvest_done"):
+            self.stats.notes.append(f"complete since {_state('harvest_done')}")
+            return
+        if api_paused():
+            self.stats.notes.append(f"API paused: {_state('paused_reason') or 'no key'}")
+            return
+        cursor = _state("harvest_cursor")
+        pages = 0
+        try:
+            while pages < self.max_pages_per_run:
+                params = {"limit": _page_size}
+                if cursor:
+                    params["cursor"] = cursor
+                page = call("/v1/products", **params)
+                pages += 1
+                data = (page or {}).get("data") or []
+                if data:
+                    with db.writer() as w:
+                        for p in data:
+                            self.stats.rows_seen += 1
+                            if PLACEHOLDER.search(f"{p.get('product_name')} {p.get('marketing_company')}"):
+                                continue
+                            is_new, _ = upsert(w, p)
+                            self.stats.rows_new += int(is_new)
+                    archive_records(data)
+                if not page or not page.get("has_next"):
+                    _set_state("harvest_done", datetime.now().isoformat())
+                    _set_state("harvest_cursor", None)
+                    break
+                cursor = page.get("next_cursor")
+                if pages % 20 == 0:
+                    _set_state("harvest_cursor", cursor)   # checkpoint
+        except QuotaExhausted as e:
+            pause_api(str(e))
+            self.stats.notes.append(f"stopped: {e}")
+        finally:
+            if cursor and not _state("harvest_done"):
+                _set_state("harvest_cursor", cursor)
+        total = db.cursor().execute("SELECT count(*) FROM drugsetu_products").fetchone()[0]
+        self.stats.notes.append(f"{pages} pages this run · {total:,} products stored")
 
 
 class DrugSetuLaunches(Connector):
@@ -124,6 +227,9 @@ class DrugSetuLaunches(Connector):
     max_pages = 40  # quota guard: ~200 products per run on the trial page size
 
     def run(self):
+        if api_paused():
+            self.stats.notes.append(f"API paused: {_state('paused_reason') or 'no key'}")
+            return
         cur = db.cursor()
         first_run = cur.execute("SELECT count(*) FROM drugsetu_products").fetchone()[0] == 0
         cursor, pages, known_streak = None, 0, 0
@@ -136,6 +242,7 @@ class DrugSetuLaunches(Connector):
                 pages += 1
                 if not page or not page.get("data"):
                     break
+                archive_records(page["data"])
                 with db.writer() as w:
                     for p in page["data"]:
                         self.stats.rows_seen += 1
@@ -163,6 +270,7 @@ class DrugSetuLaunches(Connector):
                     break
                 cursor = page.get("next_cursor")
         except QuotaExhausted as e:
+            pause_api(str(e))
             self.stats.notes.append(f"stopped: {e}")
         self.stats.notes.append(f"{pages} pages")
         with db.writer() as w:
