@@ -26,6 +26,7 @@ import News from "./screens/News";
 import Feeds from "./screens/Feeds";
 import Watchlist from "./screens/Watchlist";
 import Pipeline from "./screens/Pipeline";
+import Alerts from "./screens/Alerts";
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 60_000 } },
@@ -55,6 +56,8 @@ function Shell() {
       () => {
         qc.invalidateQueries({ queryKey: ["events"] });
         qc.invalidateQueries({ queryKey: ["overview"] });
+        qc.invalidateQueries({ queryKey: ["alert-inbox"] });
+        qc.invalidateQueries({ queryKey: ["alert-unread"] });
       }
     );
   }, []);
@@ -84,6 +87,7 @@ function Shell() {
             <Route path="/feeds" element={<Feeds />} />
             <Route path="/watch" element={<Watchlist />} />
             <Route path="/pipeline" element={<Pipeline />} />
+            <Route path="/alerts" element={<Alerts />} />
             <Route path="*" element={<Market />} />
           </Routes>
         </main>

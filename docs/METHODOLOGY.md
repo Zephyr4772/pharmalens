@@ -68,3 +68,13 @@ Court stays won by individual manufacturers are **not** tracked. Always confirm 
 - Catalog MRPs are dated, and the "as of" year is shown everywhere. DrugSetu live prices refresh individual products when they are viewed.
 - SEC outcomes are classified from the recommendation wording; ambiguous text is marked "noted". Read the linked PDF for the full recommendation.
 - The US FDA shortage list is a 2024 snapshot and is labelled as US data.
+
+## Alerts
+
+A subscription combines what to watch with where to send it:
+- **Watchlist**: starred groups, companies, molecules, combinations or SKUs. An event matches when it is about one of them (entity, molecule ids, ban molecule set, or the name appearing in the headline). New NSQ batches for watched makers or molecules are matched directly, even when they raise no tape event.
+- **Shelf list**: an inventory CSV re-checked with the SHELF engine whenever new bans, NSQ/spurious lists, recalls or price notices arrive. Only flags that were not present on the previous check are sent, so you hear about each problem once.
+- **Filters**: event kinds and a minimum severity. With no watchlist and no shelf list, every event that passes the filters is sent.
+- **Delivery**: instant and/or a daily digest at a chosen IST hour. Channels are Telegram (bot), email (SMTP) and HTTPS webhooks (Slack, Discord, Teams or any JSON receiver). Every alert is also kept in the in-app inbox with per-channel delivery status.
+
+The dispatcher runs every 2 minutes and immediately after any feed lands new events. At most 25 instant alerts are sent per subscription per run; the remainder are summarised with a link to the inbox. Channel credentials go in `.env` (see `.env.example`).

@@ -1,3 +1,4 @@
+from .alerts_job import AlertsDispatch
 from .cdsco import CdscoAlerts, CdscoBannedFdc, CdscoGazette, CdscoNsq, NsqMirror
 from .drugsetu import DrugSetuLaunches
 from .global_reg import OpenFdaIndiaRecalls
@@ -12,4 +13,5 @@ REGISTRY = {c.name: c for c in [
     NseQuotes, NseFundamentals,
     PharmaNews, OpenFdaIndiaRecalls, DrugSetuLaunches,
     CdscoApprovals, CdscoSec, Nlem, ClinicalTrialsIndia, NppaCompendium,
+    AlertsDispatch,
 ]}

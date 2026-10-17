@@ -17,6 +17,8 @@ a consumer app and does no symptom or disease prediction.
 | NEWS | 9 | News wire classified by topic and tagged to groups |
 | FEED | 0 | Connector health, run-now, sources and methodology |
 | WATCH | W | Starred SKUs/molecules/combinations/companies and events about them |
+| PIPE | P | CDSCO new drug approvals, SEC recommendations, clinical trials in India |
+| ALERT | A | Alert subscriptions (watchlist / shelf list) to Telegram, email, webhooks; inbox and daily digest |
 
 ## Run
 
@@ -37,7 +39,7 @@ Open http://localhost:8010. The server runs the connector scheduler in-process (
 `PHARMALENS_SCHEDULER=0` to disable). Run a connector by hand with
 `py -3 -m pharmalens.connectors run <name>` (it goes through the server if one is running).
 
-Put secrets in `.env` (see `.env.example`): `DRUGSETU_API_KEY` (private `ds_…` key), optional `OPENFDA_API_KEY`.
+Put secrets in `.env` (see `.env.example`): `DRUGSETU_API_KEY` (private `ds_…` key), optional `OPENFDA_API_KEY`, and for alerts `TELEGRAM_BOT_TOKEN` and/or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`.
 
 ## Data
 

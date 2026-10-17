@@ -385,3 +385,38 @@ CREATE TABLE IF NOT EXISTS trials (
     parent_id     INTEGER,
     fetched_at    TIMESTAMP
 );
+
+-- Alert subscriptions: a watchlist and/or a shelf (inventory) list routed to channels
+CREATE SEQUENCE IF NOT EXISTS seq_alert_sub START 1;
+CREATE TABLE IF NOT EXISTS alert_subscriptions (
+    id            BIGINT DEFAULT nextval('seq_alert_sub') PRIMARY KEY,
+    name          VARCHAR,
+    channels      JSON,          -- [{"type": "telegram", "chat_id": "..."}, {"type": "email", "to": "..."}, {"type": "webhook", "url": "..."}]
+    kinds         VARCHAR,       -- comma list of event kinds; NULL = all
+    min_severity  VARCHAR,       -- info | medium | high | critical
+    watch         JSON,          -- [{"key": "m:123", "label": "Paracetamol"}, ...]
+    shelf_csv     VARCHAR,       -- inventory list re-checked against new regulator data
+    shelf_state   JSON,          -- last set of shelf flags, to alert only on new ones
+    digest_hour   INTEGER,       -- local hour for a daily digest; NULL = instant only
+    instant       BOOLEAN DEFAULT TRUE,
+    active        BOOLEAN DEFAULT TRUE,
+    last_event_id BIGINT DEFAULT 0,
+    last_nsq_id   BIGINT DEFAULT 0,
+    last_digest   DATE,
+    created_at    TIMESTAMP
+);
+CREATE SEQUENCE IF NOT EXISTS seq_alert_msg START 1;
+CREATE TABLE IF NOT EXISTS alert_messages (
+    id          BIGINT DEFAULT nextval('seq_alert_msg') PRIMARY KEY,
+    sub_id      BIGINT,
+    event_id    BIGINT,
+    kind        VARCHAR,          -- event | shelf | digest | test
+    severity    VARCHAR,
+    title       VARCHAR,
+    body        VARCHAR,
+    url         VARCHAR,
+    reason      VARCHAR,          -- why it matched
+    created_at  TIMESTAMP,
+    read_at     TIMESTAMP,
+    deliveries  JSON              -- [{"channel": "telegram", "status": "sent" | "error: ..."}]
+);

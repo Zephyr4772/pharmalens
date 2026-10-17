@@ -14,6 +14,7 @@ export const NAV = [
   { key: "9", name: "NEWS", path: "/news", title: "News wire" },
   { key: "0", name: "FEED", path: "/feeds", title: "Data feeds & methodology" },
   { key: "w", name: "WATCH", path: "/watch", title: "Watchlist" },
+  { key: "a", name: "ALERT", path: "/alerts", title: "Alert subscriptions & inbox" },
 ];
 
 export function NavRail() {

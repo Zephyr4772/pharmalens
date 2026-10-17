@@ -24,6 +24,9 @@ def run_now(name: str) -> dict:
         res = execute(REGISTRY[name])
         if res.get("rows_new") or res.get("events_new"):
             refresh_derived()
+        if res.get("events_new") and name != "alerts_dispatch":
+            # push alerts as soon as a feed lands new events instead of waiting for the next tick
+            threading.Thread(target=run_now, args=("alerts_dispatch",), daemon=True).start()
         log.info("connector %s", res)
         return res
     finally:
