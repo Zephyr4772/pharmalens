@@ -450,3 +450,11 @@ textarea.code:focus { border-color: var(--amber); }
 .form label.check { flex-direction: row; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; font-size: 11.5px; color: var(--text); }
 .form input:not([type=checkbox]), .form select { width: 100%; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* label & safety */
+.safety-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+.safety-cell { border: 1px solid var(--line); padding: 6px 8px; background: var(--panel-2); }
+.safety-head { display: flex; justify-content: space-between; align-items: center; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+.safety-text { font-family: var(--sans); font-size: 11.5px; color: #b9c4cf; line-height: 1.45; }
+ul.tips { padding-left: 16px; }
+ul.tips li { margin-bottom: 3px; }

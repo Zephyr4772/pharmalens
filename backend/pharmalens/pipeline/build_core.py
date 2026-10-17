@@ -29,7 +29,7 @@ from ..normalize import (
 )
 
 CORE_TABLES = [
-    "parents", "companies", "molecules", "combos", "products",
+    "product_info", "parents", "companies", "molecules", "combos", "products",
     "product_molecules", "interactions", "nppa_ceiling", "build_meta",
 ]
 LEGAL_TOKENS = {"pvt", "private", "ltd", "limited", "llp", "inc", "co", "corp", "the", "m", "s", "ms"}
@@ -566,6 +566,9 @@ def build():
                    SELECT id, DATE '2024-08-01', mrp_legacy, 'catalog-2022-24' FROM products WHERE mrp_legacy IS NOT NULL""")
 
     load_legacy_regulatory(con, mol_ids)
+
+    from .product_info import build as build_product_info
+    build_product_info(con)
 
     # indexes for API latency
     for sql in [

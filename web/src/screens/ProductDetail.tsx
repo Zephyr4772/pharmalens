@@ -4,6 +4,62 @@ import { day, get, inr, num, type Row } from "../lib/api";
 import { ErrorBox, Kpi, Loading, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 
+const SAFETY_ORDER = ["alcohol", "pregnancy", "breastfeeding", "driving", "kidney", "liver"];
+const LEVEL_UI: Record<string, [string, string]> = {
+  unsafe: ["b-down", "UNSAFE"], caution: ["b-warn", "CAUTION"], consult: ["b-info", "CONSULT"],
+  safe_if_prescribed: ["b-up", "SAFE IF PRESCRIBED"], safe: ["b-up", "SAFE"], not_applicable: ["b-mute", "N/A"], info: ["b-mute", "SEE NOTE"],
+};
+
+function SafetyGrid({ safety }: { safety: Record<string, Row> }) {
+  const keys = SAFETY_ORDER.filter((k) => safety[k]);
+  return (
+    <Panel title="Safety profile" sub="label advice, graded · reference for prescribers and pharmacists">
+      <div className="safety-grid">
+        {keys.map((k) => {
+          const [cls, txt] = LEVEL_UI[safety[k].level] ?? LEVEL_UI.info;
+          return (
+            <div key={k} className="safety-cell">
+              <div className="safety-head"><span>{SAFETY_LABEL[k] ?? k}</span><span className={`badge ${cls}`}>{txt}</span></div>
+              <div className="safety-text">{safety[k].text}</div>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+function LabelPanel({ d }: { d: Row }) {
+  const l = d.label ?? {};
+  return (
+    <Panel title="Label information" sub="product monograph text as published by Indian e-pharmacies (1mg-derived)">
+      <div className="grid cols-2">
+        <div>
+          {l.introduction && <p className="prose">{l.introduction}</p>}
+          {l.how_it_works && <><div className="section-title" style={{ marginTop: 8 }}>How it works</div><p className="prose">{l.how_it_works}</p></>}
+          {l.how_to_use && <><div className="section-title" style={{ marginTop: 8 }}>How to use</div><p className="prose">{l.how_to_use}</p></>}
+          {!l.introduction && d.uses && <p className="prose"><b>Indications:</b> {d.uses}</p>}
+        </div>
+        <div>
+          {l.benefits?.length > 0 && <>
+            <div className="section-title">Uses & benefits</div>
+            {l.benefits.map((b: Row, i: number) => <p key={i} className="prose">{b.title && <b>{b.title}. </b>}{b.text}</p>)}
+          </>}
+          {l.quick_tips?.length > 0 && <>
+            <div className="section-title" style={{ marginTop: 8 }}>Quick tips</div>
+            <ul className="prose tips">{l.quick_tips.map((t: string, i: number) => <li key={i}>{t}</li>)}</ul>
+          </>}
+          {(l.side_effects?.length > 0 || d.side_effects) && <>
+            <div className="section-title" style={{ marginTop: 8 }}>Side effects</div>
+            {l.side_effects?.length ? <div className="chips">{l.side_effects.map((s: string) => <span key={s} className="chip">{s}</span>)}</div>
+              : <p className="prose">{d.side_effects}</p>}
+          </>}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 const SAFETY_LABEL: Record<string, string> = {
   alcohol_interaction: "Alcohol", pregnancy: "Pregnancy", breastfeeding: "Breastfeeding", driving: "Driving", kidney: "Kidney", liver: "Liver",
 };
@@ -116,13 +172,9 @@ export default function ProductDetail() {
           </Panel>
         </div>
       </div>
+      {d.label?.safety && <SafetyGrid safety={d.label.safety} />}
+      {(d.label || d.uses || d.side_effects) && <LabelPanel d={d} />}
       <LivePanel id={d.id} catalogUnit={d.unit_price} />
-      {(d.uses || d.side_effects) && (
-        <Panel title="Label information" sub="as listed by retailers">
-          {d.uses && <p className="prose"><b>Indications:</b> {d.uses}</p>}
-          {d.side_effects && <p className="prose"><b>Common side effects:</b> {d.side_effects}</p>}
-        </Panel>
-      )}
       <Panel title="Cheapest same-composition brands" sub="per unit"><ProductTable rows={d.equivalents} /></Panel>
     </div>
   );

@@ -137,6 +137,12 @@ def product(pid: int):
                 WHERE combo_id = ? AND dosage_form IS NOT DISTINCT FROM ?), 0)
         ORDER BY coalesce(p.unit_price, p.mrp) ASC LIMIT 25""",
         [p["combo_id"], pid, p["dosage_form"], p["combo_id"], p["dosage_form"]]) if p["combo_id"] else []
+    info = db.one(cur, "SELECT * FROM product_info WHERE product_id = ?", [pid])
+    if info:
+        for k in ("benefits", "quick_tips", "side_effects", "safety"):
+            if isinstance(info.get(k), str):
+                info[k] = json.loads(info[k])
+    p["label"] = info
     p["price_history"] = db.rows(cur, "SELECT observed_on, mrp, source FROM price_observations WHERE product_id = ? ORDER BY observed_on", [pid])
     p["nppa_ceiling"] = db.rows(cur, f"""
         SELECT molecule_name, form_strength, ceiling_price, unit, notification, year FROM nppa_ceiling
