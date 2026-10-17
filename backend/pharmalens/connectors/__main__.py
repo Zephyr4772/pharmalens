@@ -10,7 +10,7 @@ import httpx
 
 from . import REGISTRY
 
-SERVER = "http://127.0.0.1:8000/api/v1/admin/connectors"
+SERVER = "http://127.0.0.1:8010/api/v1/admin/connectors"
 
 
 def main(argv: list[str]):

@@ -25,6 +25,7 @@ import Equities from "./screens/Equities";
 import News from "./screens/News";
 import Feeds from "./screens/Feeds";
 import Watchlist from "./screens/Watchlist";
+import Pipeline from "./screens/Pipeline";
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 60_000 } },
@@ -82,6 +83,7 @@ function Shell() {
             <Route path="/news" element={<News />} />
             <Route path="/feeds" element={<Feeds />} />
             <Route path="/watch" element={<Watchlist />} />
+            <Route path="/pipeline" element={<Pipeline />} />
             <Route path="*" element={<Market />} />
           </Routes>
         </main>

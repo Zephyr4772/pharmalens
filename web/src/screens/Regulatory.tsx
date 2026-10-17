@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { csvUrl, day, get, inr, num, type Row } from "../lib/api";
 import { Bar, Empty, ErrorBox, Kpi, Loading, Pager, Panel, Tabs } from "../components/ui";
 
-type Tab = "nsq" | "bans" | "docs" | "usfda" | "ja" | "ceiling" | "shortage";
+type Tab = "nsq" | "bans" | "docs" | "usfda" | "ja" | "ceiling" | "nlem" | "shortage";
 
 export default function Regulatory() {
   const [sp, setSp] = useSearchParams();
@@ -45,7 +45,7 @@ export default function Regulatory() {
       </div>
       <Tabs<Tab> value={tab} onChange={(t) => setSp({ tab: t })} tabs={[
         ["nsq", "NSQ & SPURIOUS BATCHES"], ["bans", "PROHIBITED FDCs"], ["docs", "CDSCO / NPPA DOCUMENTS"],
-        ["usfda", "USFDA RECALLS"], ["ja", "JAN AUSHADHI"], ["ceiling", "NPPA CEILING PRICES"], ["shortage", "SHORTAGES"],
+        ["usfda", "USFDA RECALLS"], ["ja", "JAN AUSHADHI"], ["ceiling", "NPPA CEILING PRICES"], ["nlem", "NLEM 2022"], ["shortage", "SHORTAGES"],
       ]} />
       {tab === "nsq" && <NsqTab month={sp.get("month") ?? undefined} offenders={s.data.repeat_offenders} />}
       {tab === "bans" && <BansTab />}
@@ -53,6 +53,7 @@ export default function Regulatory() {
       {tab === "usfda" && <UsfdaTab />}
       {tab === "ja" && <JaTab />}
       {tab === "ceiling" && <CeilingTab />}
+      {tab === "nlem" && <NlemTab />}
       {tab === "shortage" && <ShortageTab />}
     </div>
   );
@@ -238,13 +239,39 @@ function CeilingTab() {
   const [q, setQ] = useState("");
   const r = useQuery({ queryKey: ["ceiling", q], queryFn: () => get("/reg/nppa-ceiling", { q, limit: 500 }) });
   return (
-    <Panel title="NPPA ceiling prices (DPCO 2013 scheduled formulations)" sub="statutory maximum price per unit">
+    <Panel title="NPPA ceiling prices — Compendium of Prices" sub="official IPDMS compendium, current revision (S.O. dated 25-Mar-2026), price per unit excluding taxes">
       <div className="filterbar inline"><input placeholder="molecule" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       <table className="tt">
         <thead><tr><th>Molecule</th><th>Form / strength</th><th className="num">Ceiling</th><th>Unit</th><th>Notification</th><th>Year</th><th className="num">Catalog SKUs</th></tr></thead>
         <tbody>{r.data?.data.map((c: Row) => (
           <tr key={c.id}><td>{c.molecule_id ? <Link to={`/m/${c.molecule_id}`}>{c.molecule_name}</Link> : c.molecule_name}</td><td className="mut">{c.form_strength}</td>
             <td className="num amb">{inr(c.ceiling_price)}</td><td className="mut">{c.unit}</td><td className="mut">{c.notification}</td><td>{c.year}</td><td className="num">{num(c.product_count)}</td></tr>
+        ))}</tbody>
+      </table>
+    </Panel>
+  );
+}
+
+function NlemTab() {
+  const [q, setQ] = useState("");
+  const [section, setSection] = useState("");
+  const r = useQuery({ queryKey: ["nlem", q, section], queryFn: () => get("/pipeline/nlem", { q, section }) });
+  return (
+    <Panel title="National List of Essential Medicines 2022" sub="P = primary, S = secondary, T = tertiary care; NLEM listing triggers DPCO price control">
+      <div className="filterbar inline">
+        <input placeholder="medicine" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={section} onChange={(e) => setSection(e.target.value)}>
+          <option value="">all sections</option>
+          {r.data?.sections?.map((s: Row) => <option key={s.section} value={s.section ?? ""}>{s.section} ({s.n})</option>)}
+        </select>
+      </div>
+      <table className="tt">
+        <thead><tr><th>Medicine</th><th>Section</th><th>Level</th><th>Dosage forms & strengths</th><th className="num">Catalog SKUs</th><th className="num">Ceiling from</th></tr></thead>
+        <tbody>{r.data?.data.map((n: Row, i: number) => (
+          <tr key={i}><td>{n.molecule_id ? <Link to={`/m/${n.molecule_id}`}>{n.molecule_name}</Link> : n.molecule_name}</td>
+            <td className="mut" title={n.section}>{n.section}</td><td>{n.level}</td>
+            <td className="mut" title={n.dosage} style={{ maxWidth: 520 }}>{n.dosage}</td>
+            <td className="num">{num(n.product_count)}</td><td className="num amb">{inr(n.nppa_ceiling)}</td></tr>
         ))}</tbody>
       </table>
     </Panel>

@@ -344,3 +344,44 @@ CREATE TABLE IF NOT EXISTS drugsetu_state (
     key   VARCHAR PRIMARY KEY,
     value VARCHAR
 );
+
+-- CDSCO Subject Expert Committee (SEC) agenda items: clinical-trial, marketing and BE permissions
+CREATE SEQUENCE IF NOT EXISTS seq_sec START 1;
+CREATE TABLE IF NOT EXISTS sec_items (
+    id             BIGINT DEFAULT nextval('seq_sec') PRIMARY KEY,
+    meeting_date   DATE,
+    committee      VARCHAR,
+    division       VARCHAR,       -- clinical_trial | new_drug | be | biological | medical_device | other
+    file_no        VARCHAR,
+    drug_text      VARCHAR,
+    firm           VARCHAR,
+    recommendation VARCHAR,
+    outcome        VARCHAR,       -- recommended | not_recommended | deferred | noted
+    molecule_ids   VARCHAR,
+    company_id     INTEGER,
+    parent_id      INTEGER,
+    source_url     VARCHAR,
+    dedupe_key     VARCHAR UNIQUE,
+    fetched_at     TIMESTAMP
+);
+
+-- Clinical trials with Indian sites (ClinicalTrials.gov API v2; CTRI ids from secondary identifiers)
+CREATE TABLE IF NOT EXISTS trials (
+    nct_id        VARCHAR PRIMARY KEY,
+    ctri_id       VARCHAR,
+    title         VARCHAR,
+    sponsor       VARCHAR,
+    sponsor_class VARCHAR,
+    phase         VARCHAR,
+    status        VARCHAR,
+    conditions    VARCHAR,
+    interventions VARCHAR,
+    start_date    VARCHAR,
+    completion_date VARCHAR,
+    india_sites   INTEGER,
+    enrollment    INTEGER,
+    last_update   DATE,
+    molecule_ids  VARCHAR,
+    parent_id     INTEGER,
+    fetched_at    TIMESTAMP
+);

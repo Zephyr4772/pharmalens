@@ -4,8 +4,8 @@
     {
       "name": "pharmalens",
       "runtimeExecutable": "py",
-      "runtimeArgs": ["-3", "-W", "ignore", "-m", "uvicorn", "pharmalens.api.main:app", "--port", "8000", "--app-dir", "backend"],
-      "port": 8000,
+      "runtimeArgs": ["-3", "-W", "ignore", "-m", "uvicorn", "pharmalens.api.main:app", "--port", "8010", "--app-dir", "backend"],
+      "port": 8010,
       "env": { "PYTHONIOENCODING": "utf-8" }
     },
     {

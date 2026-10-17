@@ -5,6 +5,7 @@ export const NAV = [
   { key: "1", name: "MKT", path: "/", title: "Market monitor" },
   { key: "2", name: "REG", path: "/reg", title: "Government & regulatory desk" },
   { key: "3", name: "SHELF", path: "/shelf", title: "Inventory compliance check" },
+  { key: "p", name: "PIPE", path: "/pipeline", title: "Approvals, SEC recommendations, clinical trials" },
   { key: "4", name: "SCRN", path: "/screener", title: "Product screener" },
   { key: "5", name: "MOL", path: "/molecules", title: "Molecules / salts" },
   { key: "6", name: "FDC", path: "/fdc", title: "Salt combinations & price spreads" },

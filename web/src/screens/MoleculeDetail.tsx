@@ -5,6 +5,7 @@ import { day, get, inr, num, type Row } from "../lib/api";
 import { ShareTable } from "../components/Share";
 import { ErrorBox, Kpi, Loading, Pager, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
+import { Outcome } from "./Pipeline";
 
 export default function MoleculeDetail() {
   const { id } = useParams();
@@ -23,6 +24,7 @@ export default function MoleculeDetail() {
         <span className="muted">{d.therapeutic_class}</span>
         <span className="muted">{d.action_class}</span>
         {d.chemical_class && <span className="faint">{d.chemical_class}</span>}
+        {d.nlem?.length > 0 && <span className="badge b-up" title={d.nlem.map((n: Row) => `${n.section} · ${n.level} · ${n.dosage}`).join(" | ")}>NLEM 2022 · {d.nlem[0].level}</span>}
         {d.nppa_ceiling != null && <span className="badge b-info">NPPA PRICE-CONTROLLED</span>}
         {d.bans?.length > 0 && <span className="badge b-down">{d.bans.length} PROHIBITED FDCs</span>}
       </div>
@@ -75,6 +77,24 @@ export default function MoleculeDetail() {
             {d.news.length ? d.news.map((n: Row) => <div className="ev" key={n.id}><span className="ev-time">{day(n.published_at)}</span><a className="ev-title" href={n.url} target="_blank" rel="noreferrer">{n.title}</a></div>) : <div className="empty">no recent coverage</div>}
           </Panel>
         </div>
+      </div>
+      <div className="grid cols-3">
+        <Panel title="Regulatory pipeline — SEC" sub="CDSCO expert committee agenda items for this molecule">
+          {d.sec.length ? <table className="tt"><tbody>{d.sec.map((x: Row, i: number) => (
+            <tr key={i}><td>{day(x.meeting_date)}</td><td title={x.drug_text}>{x.drug_text}</td><td className="mut" title={x.firm}>{x.firm}</td><td><Outcome o={x.outcome} /></td></tr>
+          ))}</tbody></table> : <div className="empty">no SEC items</div>}
+        </Panel>
+        <Panel title="CDSCO new drug approvals">
+          {d.approvals.length ? <table className="tt"><tbody>{d.approvals.map((a: Row, i: number) => (
+            <tr key={i}><td>{day(a.approved_on)}</td><td title={a.drug_text}>{a.drug_text}</td><td className="mut" title={a.indication}>{a.indication}</td></tr>
+          ))}</tbody></table> : <div className="empty">no new-drug approvals listed</div>}
+        </Panel>
+        <Panel title="Clinical trials in India">
+          {d.trials.length ? <table className="tt"><tbody>{d.trials.map((t: Row) => (
+            <tr key={t.nct_id}><td><a href={`https://clinicaltrials.gov/study/${t.nct_id}`} target="_blank" rel="noreferrer">{t.nct_id}</a></td>
+              <td title={t.title}>{t.title}</td><td className="mut">{t.phase?.replace(/PHASE/g, "P")}</td><td className="mut">{t.status?.toLowerCase().replace(/_/g, " ")}</td></tr>
+          ))}</tbody></table> : <div className="empty">no trials with Indian sites</div>}
+        </Panel>
       </div>
       <Panel title={`Single-molecule brands — cheapest per unit first`} sub={prods.data ? `${num(prods.data.meta.total)} active SKUs` : ""}
         right={<Link to={`/screener?molecule_id=${d.id}`}>open in screener ›</Link>}>

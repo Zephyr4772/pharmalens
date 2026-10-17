@@ -17,6 +17,11 @@
 | NSE | Yahoo Finance | every 5 min in market hours, fundamentals 18:30 | ~15 min delayed |
 | openFDA | api.fda.gov enforcement | daily 07:20 | Recalls where the recalling firm is in India |
 | News | ET HealthWorld, Express Pharma, targeted Google News queries | every 15 min | Topic-classified, tagged to groups/molecules |
+| CDSCO new drug approvals | CDSCO Approved New Drugs yearly lists | daily 09:25 | Drug, indication, approval date since 2015 (current-year list re-read every run) |
+| SEC recommendations | CDSCO Subject Expert Committees | 11:45, 18:45 | Every agenda item parsed: file no., drug, firm, committee, division (trial / marketing / BE / biological) and outcome (recommended / more data / not recommended) |
+| NLEM 2022 | nppa.gov.in | monthly | 384 essential medicines with care level and forms; sets the NLEM flag on molecules |
+| Clinical trials | ClinicalTrials.gov API v2 (Indian sites) | daily 05:40 | Interventional trials updated in the last 3 years. CTRI's own search is behind a CAPTCHA, so CTRI ids come from cross-registration |
+| NPPA compendium | NPPA IPDMS dashboard | weekly (Tue) | All current ceiling prices (S.O. of 25-Mar-2026) plus company-specific special-feature prices. The dashboard's request encryption (AES + RSA-wrapped key, CSRF token) is reproduced exactly as the public page does it; revisions become events |
 
 Every connector run is recorded in `connector_runs`, and new rows become `events` that stream to the UI over SSE.
 
@@ -61,5 +66,5 @@ Court stays won by individual manufacturers are **not** tracked. Always confirm 
 ## Known limitations
 
 - Catalog MRPs are dated, and the "as of" year is shown everywhere. DrugSetu live prices refresh individual products when they are viewed.
-- The NPPA 2026 price compendium sits behind an encrypted dashboard and is not ingested yet. Ceiling prices come from the NPPA list in the master dataset (952 entries).
+- SEC outcomes are classified from the recommendation wording; ambiguous text is marked "noted". Read the linked PDF for the full recommendation.
 - The US FDA shortage list is a 2024 snapshot and is labelled as US data.

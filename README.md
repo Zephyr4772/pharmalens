@@ -30,10 +30,10 @@ cd web && npm install && npm run build
 cd backend && py -3 -m pharmalens.pipeline.build_core
 ```
 ```bash
-cd backend && py -3 -m uvicorn pharmalens.api.main:app --port 8000
+cd backend && py -3 -m uvicorn pharmalens.api.main:app --port 8010
 ```
 
-Open http://localhost:8000. The server runs the connector scheduler in-process (set
+Open http://localhost:8010. The server runs the connector scheduler in-process (set
 `PHARMALENS_SCHEDULER=0` to disable). Run a connector by hand with
 `py -3 -m pharmalens.connectors run <name>` (it goes through the server if one is running).
 

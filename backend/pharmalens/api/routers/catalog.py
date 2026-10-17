@@ -318,6 +318,13 @@ def molecule(mid: int):
     m["bans"] = db.rows(cur, "SELECT combo_text, notification, notified_on, status FROM reg_banned_fdc WHERE list_contains(string_split(mkey, '|'), ?) ORDER BY notified_on DESC NULLS LAST", [m["mkey"]])
     m["shortages"] = db.rows(cur, "SELECT region, molecule_text, company, status, reason, updated_on, source FROM shortages WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY updated_on DESC NULLS LAST LIMIT 20", [str(mid)])
     m["news"] = db.rows(cur, "SELECT id, published_at, source, title, url, topic FROM news WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY published_at DESC LIMIT 15", [str(mid)])
+    m["nlem"] = db.rows(cur, "SELECT section, level, dosage FROM nlem WHERE molecule_id = ?", [mid])
+    m["approvals"] = db.rows(cur, """SELECT drug_text, indication, approved_on, source_url FROM reg_approvals
+                                     WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY approved_on DESC NULLS LAST LIMIT 20""", [str(mid)])
+    m["sec"] = db.rows(cur, """SELECT meeting_date, committee, division, drug_text, firm, outcome, source_url FROM sec_items
+                               WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY meeting_date DESC LIMIT 40""", [str(mid)])
+    m["trials"] = db.rows(cur, """SELECT nct_id, ctri_id, title, sponsor, phase, status, india_sites, last_update FROM trials
+                                  WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY last_update DESC LIMIT 30""", [str(mid)])
     m["forms"] = db.rows(cur, """SELECT p.dosage_form, count(*) n, median(p.mrp) median_mrp FROM products p
                                  JOIN product_molecules pm ON pm.product_id = p.id WHERE pm.molecule_id = ? AND p.dosage_form IS NOT NULL
                                  GROUP BY 1 ORDER BY 2 DESC LIMIT 12""", [mid])
@@ -384,6 +391,10 @@ def parent(slug: str):
     p["history"] = db.rows(cur, "SELECT d, close, volume FROM quote_history WHERE ticker = ? ORDER BY d", [f"{p['ticker']}.NS"]) if p["ticker"] else []
     p["usfda"] = db.rows(cur, "SELECT kind, firm, subject, issued_on, url FROM usfda_actions WHERE parent_id = ? ORDER BY issued_on DESC LIMIT 30", [p["id"]])
     p["news"] = db.rows(cur, "SELECT id, published_at, source, title, url, topic FROM news WHERE list_contains(string_split(parent_ids, ','), ?) ORDER BY published_at DESC LIMIT 30", [str(p["id"])])
+    p["sec"] = db.rows(cur, """SELECT meeting_date, committee, division, drug_text, outcome, source_url FROM sec_items
+                               WHERE parent_id = ? ORDER BY meeting_date DESC LIMIT 40""", [p["id"]])
+    p["trials"] = db.rows(cur, """SELECT nct_id, ctri_id, title, phase, status, india_sites, last_update FROM trials
+                                  WHERE parent_id = ? ORDER BY last_update DESC LIMIT 40""", [p["id"]])
     return cleanrows([dossier(cur, "parent", p["id"], p)])[0]
 
 

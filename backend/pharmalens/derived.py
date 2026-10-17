@@ -192,9 +192,19 @@ def migrate():
             cur.execute(sql)
 
 
+def refresh_reference(cur):
+    """Molecule flags that depend on live regulatory tables."""
+    cur.execute("UPDATE molecules SET is_nlem = (id IN (SELECT molecule_id FROM nlem WHERE molecule_id IS NOT NULL))")
+    cur.execute("UPDATE molecules SET nppa_ceiling = NULL WHERE nppa_ceiling IS NOT NULL")
+    cur.execute("""UPDATE molecules SET nppa_ceiling = s.cp
+                   FROM (SELECT molecule_id, min(ceiling_price) cp FROM nppa_ceiling WHERE molecule_id IS NOT NULL GROUP BY 1) s
+                   WHERE molecules.id = s.molecule_id""")
+
+
 def refresh_derived():
     migrate()
     with db.writer() as cur:
+        refresh_reference(cur)
         refresh_bans(cur)
         refresh_market_share(cur)
 

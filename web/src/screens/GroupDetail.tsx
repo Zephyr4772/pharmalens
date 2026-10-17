@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { crore, day, get, num, signed, type Row } from "../lib/api";
 import { Dossier } from "../components/Dossier";
 import { ErrorBox, Kpi, LineChart, Loading, Panel, Star } from "../components/ui";
+import { Outcome } from "./Pipeline";
 
 export default function GroupDetail() {
   const { slug } = useParams();
@@ -44,6 +45,20 @@ export default function GroupDetail() {
         </Panel>
         <Panel title="News">
           {d.news.length ? d.news.map((n: Row) => <div className="ev" key={n.id}><span className="ev-time">{day(n.published_at)}</span><span className={`ev-kind topic-${n.topic}`}>{n.topic}</span><a className="ev-title" href={n.url} target="_blank" rel="noreferrer">{n.title}</a></div>) : <div className="empty">no recent coverage</div>}
+        </Panel>
+      </div>
+      <div className="grid cols-2">
+        <Panel title="Regulatory pipeline — SEC" sub="this group's agenda items at CDSCO expert committees">
+          {d.sec.length ? <table className="tt"><tbody>{d.sec.map((x: Row, i: number) => (
+            <tr key={i}><td>{day(x.meeting_date)}</td><td className="mut">{String(x.committee).replace("SEC ", "")}</td><td title={x.drug_text}>{x.drug_text}</td><td><Outcome o={x.outcome} /></td>
+              <td><a href={x.source_url} target="_blank" rel="noreferrer">pdf</a></td></tr>
+          ))}</tbody></table> : <div className="empty">no SEC items matched to this group</div>}
+        </Panel>
+        <Panel title="Clinical trials in India" sub="sponsored by this group">
+          {d.trials.length ? <table className="tt"><tbody>{d.trials.map((t: Row) => (
+            <tr key={t.nct_id}><td><a href={`https://clinicaltrials.gov/study/${t.nct_id}`} target="_blank" rel="noreferrer">{t.nct_id}</a></td>
+              <td title={t.title}>{t.title}</td><td className="mut">{t.phase?.replace(/PHASE/g, "P")}</td><td className="mut">{t.status?.toLowerCase().replace(/_/g, " ")}</td></tr>
+          ))}</tbody></table> : <div className="empty">no trials on record</div>}
         </Panel>
       </div>
       <Dossier d={d} />
