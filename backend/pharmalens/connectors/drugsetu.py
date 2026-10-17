@@ -185,7 +185,8 @@ class DrugSetuHarvest(Connector):
         pages = 0
         try:
             while pages < self.max_pages_per_run:
-                params = {"limit": _page_size}
+                # medicines only: the quota is too scarce to spend on supplements and cosmetics
+                params = {"limit": _page_size, "type": "drug"}
                 if cursor:
                     params["cursor"] = cursor
                 page = call("/v1/products", **params)
