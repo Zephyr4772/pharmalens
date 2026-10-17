@@ -198,6 +198,13 @@ def build():
     t0 = time.time()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(DB_PATH))
+    # official NPPA compendium rows (written by the nppa_compendium connector) survive rebuilds
+    official_nppa = []
+    try:
+        official_nppa = con.execute("""SELECT molecule_name, form_strength, ceiling_price, unit, notification, year, source
+                                       FROM nppa_ceiling WHERE source LIKE 'NPPA compendium%'""").fetchall()
+    except duckdb.CatalogException:
+        pass
     for t in CORE_TABLES:
         con.execute(f"DROP TABLE IF EXISTS {t}")
     con.execute((SEED_DIR.parent / "schema.sql").read_text())
@@ -512,8 +519,13 @@ def build():
             JOIN products p ON p.src_id = d.medicine_id"""
     )
 
-    # NPPA ceiling prices (master copy; live connector appends newer notifications)
-    nppa = con.execute(
+    # NPPA ceiling prices: the official compendium when we have it, else the dataset copy
+    if official_nppa:
+        bulk_insert(con, "nppa_ceiling", ["id", "molecule_id", "molecule_name", "form_strength", "ceiling_price", "unit", "notification", "year", "source"],
+            [(i + 1, mol_ids.get(molecule_key(re.sub(r"\(.*?\)", " ", n))) if "+" not in n else None, n, fs, cp, u, nt, y, src)
+             for i, (n, fs, cp, u, nt, y, src) in enumerate(official_nppa)])
+        log(f"nppa_ceiling: kept {len(official_nppa):,} official compendium rows")
+    nppa = [] if official_nppa else con.execute(
         f"SELECT sno, year, molecule_name, dosage_form_strength, notification, ceiling_price_inr, unit FROM read_csv_auto('{M}nppa_ceiling_prices.csv', sample_size=-1)"
     ).fetchall()
     bulk_insert(con, "nppa_ceiling", ["id", "molecule_id", "molecule_name", "form_strength", "ceiling_price", "unit", "notification", "year", "source"],

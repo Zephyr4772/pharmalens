@@ -23,6 +23,18 @@
 | Clinical trials | ClinicalTrials.gov API v2 (Indian sites) | daily 05:40 | Interventional trials updated in the last 3 years. CTRI's own search is behind a CAPTCHA, so CTRI ids come from cross-registration |
 | NPPA compendium | NPPA IPDMS dashboard | weekly (Tue) | All current ceiling prices (S.O. of 25-Mar-2026) plus company-specific special-feature prices. The dashboard's request encryption (AES + RSA-wrapped key, CSRF token) is reproduced exactly as the public page does it; revisions become events |
 
+| CDSCO NSQ portal | cdscoonline.gov.in public NSQ / spurious tables (JSON) | 09:20, 16:20; last 3 months re-read every run | Authoritative from Jan 2019: for each month it replaces PDF- and mirror-parsed rows |
+| CDSCO approvals database | cdscoonline.gov.in `loadDrugApprovals` | 10:05, 19:05 | Every approval since 2018 with composition, dosage form, division, applicant and all manufacturing sites |
+| CDSCO brand registry | Rule 84AB brand-name declarations | weekly (Sun 03:00) | ~90k brand → licensed manufacturer / licence number / generic, enumerated by two-character searches |
+| CDCI | NRCeS / C-DAC Common Drug Codes for India (2026-07 release, GitHub copy until NRCeS credentials are set) | monthly (3rd) | Brand, generic, substance (CAS, UNII, SMILES), supplier, dose-form and route masters; substances linked to molecules |
+| State procurement | RMSCL Rajasthan rate contracts; TNMSC Tamil Nadu tender rates | twice weekly | What the public system pays per unit or pack, by supplier and L-rank (TNMSC adds order share). Items are linked to molecules by name. Rates are per the tender's pack, not per tablet |
+| US FDA bulk | openFDA downloads: Drugs@FDA, Orange Book (+ patents, exclusivity), NDC, shortages | Mon, Thu | Applications, generic-entry dates and US listings, linked to Indian groups by sponsor/labeler name |
+| FDA Import Alert 66-40 | accessdata.fda.gov | weekly | Firms whose drugs are refused entry for cGMP failures; new Indian firms raise events |
+| WHO | Prequalified medicines (CSV, Wed), medical product alerts (falsified / substandard, daily) | as listed | Alerts from the last 12 months become events |
+| EMA | EU medicines register (XLSX) | weekly (Wed) | Centralised authorisations |
+| NSE filings | NSE corporate announcements per listed group | hourly 09:50–18:50 | Topic-tagged (results, USFDA, M&A, plant actions) |
+| Molecule enrichment | ChEMBL REST; openFDA label and FAERS APIs | 4× daily, resumable | ATC, mechanism, indications by phase, boxed-warning flag; latest single-ingredient US label sections; top reported adverse reactions. Molecules with 3+ SKUs, largest first, refreshed after 45 days. Without `OPENFDA_API_KEY` about 120 molecules a run fit openFDA's 1,000 requests/day |
+
 Every connector run is recorded in `connector_runs`, and new rows become `events` that stream to the UI over SSE.
 
 ## Catalog normalisation
@@ -67,7 +79,9 @@ Court stays won by individual manufacturers are **not** tracked. Always confirm 
 
 - Catalog MRPs are dated, and the "as of" year is shown everywhere. DrugSetu live prices refresh individual products when they are viewed.
 - SEC outcomes are classified from the recommendation wording; ambiguous text is marked "noted". Read the linked PDF for the full recommendation.
-- The US FDA shortage list is a 2024 snapshot and is labelled as US data.
+- US data (shortages, FAERS, labels) describe the US market and are labelled as such. FAERS counts are spontaneous reports: they show what gets reported, not how often reactions happen.
+- Procurement rates are matched to molecules by name only; a rate's pack (e.g. 10×10 tablets) must be read before comparing with retail MRP.
+- The brand registry is matched to products by brand stem (first word of the name), so common stems can show more than one declaration.
 
 ## Alerts
 

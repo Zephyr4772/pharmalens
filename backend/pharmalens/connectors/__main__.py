@@ -34,6 +34,8 @@ def main(argv: list[str]):
             pass
         from ..scheduler import run_now
         print(json.dumps(run_now(n), default=str))
+    from .. import db
+    db.close()   # checkpoint so the WAL never outlives a CLI run
 
 
 if __name__ == "__main__":

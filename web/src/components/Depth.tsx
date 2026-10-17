@@ -1,0 +1,159 @@
+// Depth panels fed by the expansion sources: ChEMBL / openFDA / FAERS pharmacology, state procurement tenders,
+// US & WHO & EU registrations, NSE filings, CDSCO brand-name registry.
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { day, inr, num, type Row } from "../lib/api";
+import { Bar, Panel, Tabs } from "./ui";
+
+const LABEL_TITLES: Record<string, string> = {
+  boxed_warning: "Boxed warning", indications: "Indications", contraindications: "Contraindications", warnings: "Warnings & precautions",
+  adverse_reactions: "Adverse reactions", interactions: "Drug interactions", mechanism: "Mechanism of action",
+  pregnancy: "Pregnancy & special populations", overdosage: "Overdosage",
+};
+
+export function Pharmacology({ e, compact = false }: { e: Row | null | undefined; compact?: boolean }) {
+  const [sec, setSec] = useState<string | null>(null);
+  if (!e) return <Panel title="Pharmacology" sub="ChEMBL · US label · FAERS"><div className="empty">not enriched yet — the enrichment feed works through molecules largest-first</div></Panel>;
+  const label: Row = e.us_label ?? {};
+  const meta: Row = e.us_label_meta ?? {};
+  const faers: Row[] = e.faers_top ?? [];
+  const max = Math.max(...faers.map((f) => f.count), 1);
+  const keys = Object.keys(LABEL_TITLES).filter((k) => label[k]);
+  const open = sec ?? keys[0];
+  return (
+    <div className={compact ? "stack" : "grid cols-3"}>
+      <Panel title="Pharmacology" sub="ChEMBL (EMBL-EBI)"
+        right={e.chembl_id && <a href={`https://www.ebi.ac.uk/chembl/compound_report_card/${e.chembl_id}/`} target="_blank" rel="noreferrer">{e.chembl_id} ›</a>}>
+        {e.chembl_id ? (
+          <div className="stack-sm">
+            <div className="chips">
+              {(e.atc ?? []).map((a: string) => <span key={a} className="badge b-info" title="WHO ATC code">{a}</span>)}
+              {e.max_phase != null && <span className="badge b-mute">phase {e.max_phase}</span>}
+              {e.first_approval && <span className="badge b-mute">first approved {e.first_approval}</span>}
+              {e.black_box && <span className="badge b-down">BOXED WARNING</span>}
+              {e.withdrawn && <span className="badge b-down">WITHDRAWN (somewhere)</span>}
+            </div>
+            {(e.mechanisms ?? []).length > 0 && <table className="tt"><tbody>{e.mechanisms.map((m: Row, i: number) => (
+              <tr key={i}><td>{m.moa}</td><td className="mut">{m.action?.toLowerCase()}</td></tr>))}</tbody></table>}
+            {(e.indications ?? []).length > 0 && <div className="chips">{e.indications.slice(0, compact ? 12 : 24).map((i: Row) => (
+              <span key={i.term} className={`chip ${i.phase >= 4 ? "chip-on" : ""}`} title={`max phase ${i.phase}`}>{i.term}</span>))}</div>}
+          </div>
+        ) : <div className="empty">no ChEMBL match</div>}
+      </Panel>
+      <Panel title="Most-reported adverse reactions" sub="US FAERS spontaneous reports — a signal, not incidence">
+        {faers.length ? faers.slice(0, compact ? 8 : 14).map((f) => <Bar key={f.term} label={f.term} value={f.count} max={max} text={num(f.count)} />)
+          : <div className="empty">no FAERS reports matched</div>}
+      </Panel>
+      <Panel title="US prescribing label" sub={meta.generic ? `${meta.brand ?? meta.generic} · ${meta.manufacturer ?? ""} · ${meta.effective ? `${meta.effective.slice(0, 4)}-${meta.effective.slice(4, 6)}` : ""}` : "openFDA"}
+        right={meta.set_id && <a href={meta.url} target="_blank" rel="noreferrer">DailyMed ›</a>}>
+        {keys.length ? (
+          <>
+            <div className="chips">{keys.map((k) => (
+              <button key={k} className={`chip ${k === open ? "chip-on" : ""} ${k === "boxed_warning" ? "neg" : ""}`} onClick={() => setSec(k)}>{LABEL_TITLES[k]}</button>))}</div>
+            <div className="label-text">{label[open]}</div>
+          </>
+        ) : <div className="empty">no US label found</div>}
+      </Panel>
+    </div>
+  );
+}
+
+export function Procurement({ rows, title = "Government procurement rates", sub }: { rows: Row[] | undefined; title?: string; sub?: string }) {
+  const list = rows ?? [];
+  return (
+    <Panel title={title} sub={sub ?? "state medical corporation tenders — what the public system pays (RMSCL Rajasthan, TNMSC Tamil Nadu)"}>
+      {list.length ? (
+        <table className="tt">
+          <thead><tr><th>Buyer</th><th>Item</th><th>Pack</th><th className="num">Rate</th><th>Rank</th><th>Supplier</th><th>Tender</th><th>Valid to</th></tr></thead>
+          <tbody>{list.map((r, i) => (
+            <tr key={i}>
+              <td className="mut">{r.buyer}</td><td title={r.item}>{r.item}</td><td className="mut">{r.unit}</td>
+              <td className="num amb">{inr(r.rate)}</td>
+              <td>{r.level === "L1" ? <span className="badge b-up">L1</span> : <span className="faint">{r.level}</span>}{r.order_share != null && <span className="faint"> {r.order_share}%</span>}</td>
+              <td title={r.supplier}>{r.supplier}</td><td className="faint" title={r.tender_no}>{r.tender_no}</td><td className="mut">{day(r.valid_to)}</td>
+            </tr>))}</tbody>
+        </table>
+      ) : <div className="empty">no state tender for this composition</div>}
+    </Panel>
+  );
+}
+
+export function GlobalRegs({ g }: { g: Row | undefined }) {
+  const [tab, setTab] = useState<"us" | "pat" | "who" | "ema">("us");
+  if (!g) return null;
+  const ndc = g.us_ndc ?? {};
+  return (
+    <Panel title="Global registrations" sub="US FDA (Drugs@FDA · Orange Book · NDC) · WHO prequalification · EMA"
+      right={<Tabs value={tab} onChange={setTab} tabs={[["us", `US apps ${g.us_applications?.length ?? 0}`], ["pat", `patents ${g.us_patents?.length ?? 0}`], ["who", `WHO PQ ${g.who_pq?.length ?? 0}`], ["ema", `EMA ${g.ema?.length ?? 0}`]]} />}>
+      {ndc.n > 0 && <div className="faint" style={{ marginBottom: 6 }}>{num(ndc.n)} US NDC listings from {num(ndc.labelers)} labelers · {num(ndc.indian_group_ndcs)} by groups tracked here{ndc.indian_groups?.length ? `: ${ndc.indian_groups.slice(0, 8).join(", ")}` : ""}</div>}
+      {tab === "us" && (g.us_applications?.length ? <table className="tt"><tbody>{g.us_applications.map((a: Row) => (
+        <tr key={a.application_number}><td className="mut">{a.application_number}</td><td>{a.parent ? <Link to={`/g/${a.parent_slug}`}>{a.sponsor}</Link> : a.sponsor}</td>
+          <td className="mut" title={a.brands}>{a.brands}</td><td className="faint">{a.dosage_forms}</td><td className="mut">{a.marketing_status}</td><td>{day(a.last_action)}</td></tr>))}</tbody></table>
+        : <div className="empty">no US applications matched</div>)}
+      {tab === "pat" && (g.us_patents?.length ? <table className="tt"><thead><tr><th>Application</th><th>Kind</th><th>Number / code</th><th>Use</th><th>Expires</th></tr></thead><tbody>{g.us_patents.map((p: Row, i: number) => (
+        <tr key={i}><td className="mut">{p.application_number}</td><td>{p.kind}</td><td>{p.code}</td><td className="faint">{p.use_code}</td><td className="amb">{day(p.expires_on)}</td></tr>))}</tbody></table>
+        : <div className="empty">no live US patents or exclusivities</div>)}
+      {tab === "who" && (g.who_pq?.length ? <table className="tt"><tbody>{g.who_pq.map((w: Row) => (
+        <tr key={w.ref}><td className="mut">{w.ref}</td><td title={w.inn}>{w.inn}</td><td>{w.applicant}</td><td className="faint">{w.dosage_form}</td><td>{day(w.prequalified_on)}</td></tr>))}</tbody></table>
+        : <div className="empty">not WHO-prequalified</div>)}
+      {tab === "ema" && (g.ema?.length ? <table className="tt"><tbody>{g.ema.map((e: Row, i: number) => {
+        const name = e.name_of_medicine ?? e.medicine_name ?? Object.values(e)[1];
+        const status = e.medicine_status ?? e.authorisation_status ?? "";
+        const holder = e.marketing_authorisation_developer_applicant_holder ?? e.marketing_authorisation_holder_company_name ?? "";
+        return <tr key={i}><td>{String(name)}</td><td className="mut">{String(status)}</td><td className="faint">{String(holder)}</td></tr>;
+      })}</tbody></table> : <div className="empty">no EU centralised authorisation</div>)}
+    </Panel>
+  );
+}
+
+export function BrandRegistry({ rows }: { rows: Row[] | undefined }) {
+  return (
+    <Panel title="CDSCO brand-name registry" sub="Rule 84AB declarations — licensed manufacturer behind the brand">
+      {rows?.length ? <table className="tt"><tbody>{rows.map((b, i) => (
+        <tr key={i}><td>{b.brand_name}</td><td className="mut" title={b.generic_name}>{b.generic_name}</td><td title={b.firm_name}>{b.firm_name}</td><td className="faint">{b.license_number}</td></tr>))}</tbody></table>
+        : <div className="empty">no declaration found for this brand name</div>}
+    </Panel>
+  );
+}
+
+export function Filings({ rows }: { rows: Row[] | undefined }) {
+  return (
+    <Panel title="Exchange filings" sub="NSE corporate announcements">
+      {rows?.length ? rows.map((f, i) => (
+        <div className="ev" key={i}><span className="ev-time">{day(f.announced_at)}</span>{f.topic && <span className={`ev-kind topic-${f.topic}`}>{f.topic}</span>}
+          {f.attachment ? <a className="ev-title" href={f.attachment} target="_blank" rel="noreferrer" title={f.text}>{f.category}: {f.text}</a> : <span className="ev-title" title={f.text}>{f.category}: {f.text}</span>}</div>))
+        : <div className="empty">no filings fetched</div>}
+    </Panel>
+  );
+}
+
+export function Tenders({ rows }: { rows: Row[] | undefined }) {
+  return (
+    <Panel title="Government tender wins" sub="state rate contracts held as L1 or matched supplier">
+      {rows?.length ? <table className="tt"><tbody>{rows.map((r, i) => (
+        <tr key={i}><td className="mut">{r.buyer}</td><td title={r.item}>{r.item}</td><td className="mut">{r.unit}</td><td className="num amb">{inr(r.rate)}</td>
+          <td>{r.level === "L1" ? <span className="badge b-up">L1</span> : <span className="faint">{r.level}</span>}{r.order_share != null && <span className="faint"> {r.order_share}%</span>}</td></tr>))}</tbody></table>
+        : <div className="empty">no state tender contracts matched</div>}
+    </Panel>
+  );
+}
+
+export function Licences({ rows }: { rows: Row[] | undefined }) {
+  return (
+    <Panel title="Manufacturing licences" sub="from CDSCO brand-name declarations">
+      {rows?.length ? <table className="tt"><tbody>{rows.map((l, i) => (
+        <tr key={i}><td>{l.license_number}</td><td className="mut" title={l.firm}>{l.firm}</td><td className="num">{num(l.brands)} brands</td></tr>))}</tbody></table>
+        : <div className="empty">no declarations matched</div>}
+    </Panel>
+  );
+}
+
+export function UsPortfolio({ p, recent, ndc, pq }: { p: Row | null | undefined; recent: Row[] | undefined; ndc: number; pq: Row[] | undefined }) {
+  return (
+    <Panel title="US & WHO footprint" sub={p ? `${num(p.applications)} FDA applications · ${num(p.andas)} ANDA · ${num(p.ndas)} NDA · ${num(p.blas)} BLA · ${num(ndc)} NDC listings · ${num(pq?.length)} WHO PQ` : "openFDA"}>
+      {recent?.length ? <table className="tt"><tbody>{recent.map((a) => (
+        <tr key={a.application_number}><td className="mut">{a.application_number}</td><td title={a.ingredients}>{a.brands || a.ingredients}</td><td className="faint">{a.dosage_forms}</td><td className="mut">{a.marketing_status}</td><td>{day(a.last_action)}</td></tr>))}</tbody></table>
+        : <div className="empty">no US applications matched</div>}
+    </Panel>
+  );
+}

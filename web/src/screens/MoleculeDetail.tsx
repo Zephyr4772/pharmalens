@@ -6,6 +6,7 @@ import { ShareTable } from "../components/Share";
 import { ErrorBox, Kpi, Loading, Pager, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 import { Outcome } from "./Pipeline";
+import { GlobalRegs, Pharmacology, Procurement } from "../components/Depth";
 
 export default function MoleculeDetail() {
   const { id } = useParams();
@@ -25,7 +26,7 @@ export default function MoleculeDetail() {
         <span className="muted">{d.action_class}</span>
         {d.chemical_class && <span className="faint">{d.chemical_class}</span>}
         {d.nlem?.length > 0 && <span className="badge b-up" title={d.nlem.map((n: Row) => `${n.section} · ${n.level} · ${n.dosage}`).join(" | ")}>NLEM 2022 · {d.nlem[0].level}</span>}
-        {d.nppa_ceiling != null && <span className="badge b-info">NPPA PRICE-CONTROLLED</span>}
+        {d.nppa_ceiling?.length > 0 && <span className="badge b-info">NPPA PRICE-CONTROLLED</span>}
         {d.bans?.length > 0 && <span className="badge b-down">{d.bans.length} PROHIBITED FDCs</span>}
       </div>
       <div className="kpis">
@@ -33,10 +34,13 @@ export default function MoleculeDetail() {
         <Kpi label="Marketers" value={num(d.company_count)} />
         <Kpi label="Combinations" value={num(d.combo_count)} />
         <Kpi label="Concentration (HHI)" value={num(d.stats?.hhi)} />
-        <Kpi label="Lowest NPPA ceiling" value={inr(d.nppa_ceiling)} />
+        <Kpi label="Lowest NPPA ceiling" value={d.nppa_ceiling.length ? inr(Math.min(...d.nppa_ceiling.map((c: Row) => c.ceiling_price).filter((x: number) => x != null))) : "—"} />
         <Kpi label="NSQ batches" value={num(d.nsq.length)} tone={d.nsq.length ? "down" : undefined} />
         <Kpi label="Jan Aushadhi" value={d.jan_aushadhi.length ? inr(d.jan_aushadhi[0].mrp) : "—"} sub={d.jan_aushadhi[0]?.unit_size} />
+        <Kpi label="Registered brands" value={num(d.brand_registry_count?.n)} sub={d.brand_registry_count?.firms ? `${num(d.brand_registry_count.firms)} licensed firms` : undefined} />
+        <Kpi label="US FDA applications" value={num(d.global?.us_applications?.length)} sub={d.global?.us_ndc?.n ? `${num(d.global.us_ndc.n)} NDCs` : undefined} />
       </div>
+      <Pharmacology e={d.pharmacology} />
       <div className="grid cols-3">
         <Panel title="Market share" sub="by group/company, estimated value" className="span-2"><ShareTable rows={d.share} stats={d.stats} /></Panel>
         <div className="stack">
@@ -96,6 +100,26 @@ export default function MoleculeDetail() {
           ))}</tbody></table> : <div className="empty">no trials with Indian sites</div>}
         </Panel>
       </div>
+      <div className="grid cols-2">
+        <Procurement rows={d.procurement} />
+        <GlobalRegs g={d.global} />
+      </div>
+      {d.cdci?.length > 0 && (
+        <div className="grid cols-3">
+          <Panel title="National drug terminology (CDCI)" sub="NRCeS / C-DAC Common Drug Codes for India · CC BY 4.0">
+            <table className="tt"><tbody>{[["Substance", "substance_name"], ["CDCI code", "identifier"], ["CAS", "cas_number"], ["UNII", "unii"], ["Formula", "molecular_formula"], ["IUPAC", "iupac_name"]]
+              .filter(([, k]) => d.cdci[0][k]).map(([l, k]) => <tr key={k}><td className="mut">{l}</td><td style={{ whiteSpace: "normal" }}>{String(d.cdci[0][k])}</td></tr>)}</tbody></table>
+            {d.cdci[0].substance_description && <div className="label-text">{d.cdci[0].substance_description}</div>}
+            {d.cdci[0].toxicity && <div className="label-text"><span className="neg">Toxicity · </span>{d.cdci[0].toxicity}</div>}
+          </Panel>
+          <Panel title="CDCI generic monographs" sub="indication · contraindications · interactions (hover)" className="span-2">
+            {d.cdci_generics?.length ? <table className="tt"><tbody>{d.cdci_generics.map((g: Row, i: number) => (
+              <tr key={i}><td title={g.generic_name}>{g.generic_name}</td><td className="mut" title={g.indication}>{g.indication}</td>
+                <td className="neg" title={g.contra_indication}>{g.contra_indication}</td><td className="faint" title={g.interaction_with_drugs}>{g.interaction_with_drugs}</td></tr>))}</tbody></table>
+              : <div className="empty">no generic entries</div>}
+          </Panel>
+        </div>
+      )}
       <Panel title={`Single-molecule brands — cheapest per unit first`} sub={prods.data ? `${num(prods.data.meta.total)} active SKUs` : ""}
         right={<Link to={`/screener?molecule_id=${d.id}`}>open in screener ›</Link>}>
         {prods.isLoading ? <Loading /> : <ProductTable rows={prods.data?.data ?? []} />}

@@ -420,3 +420,62 @@ CREATE TABLE IF NOT EXISTS alert_messages (
     read_at     TIMESTAMP,
     deliveries  JSON              -- [{"channel": "telegram", "status": "sent" | "error: ..."}]
 );
+
+-- Generic per-connector progress markers (months fetched, cursors, ...)
+CREATE TABLE IF NOT EXISTS connector_state (
+    key   VARCHAR PRIMARY KEY,
+    value VARCHAR
+);
+
+-- CDSCO Rule 84AB brand-name registry
+CREATE TABLE IF NOT EXISTS brand_registry (
+    firm_name      VARCHAR,
+    license_number VARCHAR,
+    generic_name   VARCHAR,
+    brand_name     VARCHAR,
+    brand_norm     VARCHAR,
+    company_id     INTEGER,
+    fetched_at     TIMESTAMP
+);
+
+-- US FDA (openFDA bulk)
+CREATE TABLE IF NOT EXISTS us_applications (
+    application_number VARCHAR, sponsor VARCHAR, parent_id INTEGER, app_type VARCHAR, brands VARCHAR, ingredients VARCHAR,
+    dosage_forms VARCHAR, marketing_status VARCHAR, first_approval DATE, last_action DATE, n_submissions INTEGER, molecule_ids VARCHAR
+);
+CREATE TABLE IF NOT EXISTS us_orange_book (
+    application_number VARCHAR, product_number VARCHAR, brand VARCHAR, ingredients VARCHAR, strengths VARCHAR, dosage_form VARCHAR,
+    route VARCHAR, app_type VARCHAR, rld BOOLEAN, marketing_status VARCHAR, approval_date DATE, applicant VARCHAR, parent_id INTEGER,
+    molecule_ids VARCHAR
+);
+CREATE TABLE IF NOT EXISTS us_patents (
+    application_number VARCHAR, product_number VARCHAR, kind VARCHAR, code VARCHAR, use_code VARCHAR, expires_on DATE,
+    ingredients VARCHAR, molecule_ids VARCHAR
+);
+CREATE TABLE IF NOT EXISTS us_ndc (
+    product_ndc VARCHAR, labeler VARCHAR, parent_id INTEGER, brand VARCHAR, generic VARCHAR, dosage_form VARCHAR,
+    marketing_category VARCHAR, application_number VARCHAR, manufacturer VARCHAR, molecule_ids VARCHAR
+);
+CREATE TABLE IF NOT EXISTS who_pq (
+    ref VARCHAR, inn VARCHAR, product_type VARCHAR, therapeutic_area VARCHAR, applicant VARCHAR, dosage_form VARCHAR,
+    basis VARCHAR, prequalified_on DATE, parent_id INTEGER, molecule_ids VARCHAR
+);
+CREATE TABLE IF NOT EXISTS corp_announcements (
+    seq_id VARCHAR PRIMARY KEY, symbol VARCHAR, parent_id INTEGER, announced_at TIMESTAMP, category VARCHAR, text VARCHAR,
+    attachment VARCHAR, topic VARCHAR, fetched_at TIMESTAMP
+);
+
+-- Public procurement rate contracts (state medical corporations)
+CREATE TABLE IF NOT EXISTS procurement_rates (
+    buyer VARCHAR, state VARCHAR, item_code VARCHAR, item VARCHAR, kind VARCHAR, tender_no VARCHAR, supplier VARCHAR,
+    company_id INTEGER, unit VARCHAR, rate DOUBLE, gst VARCHAR, level VARCHAR, valid_from DATE, valid_to DATE,
+    molecule_ids VARCHAR, source_url VARCHAR, fetched_at TIMESTAMP,
+    category VARCHAR, order_share DOUBLE        -- TNMSC: tender category and share of orders given to this supplier
+);
+
+-- Per-molecule enrichment (ChEMBL pharmacology, openFDA label sections, FAERS top reactions)
+CREATE TABLE IF NOT EXISTS molecule_enrichment (
+    molecule_id INTEGER PRIMARY KEY, chembl_id VARCHAR, atc JSON, max_phase DOUBLE, first_approval INTEGER,
+    molecule_type VARCHAR, withdrawn BOOLEAN, black_box BOOLEAN, mechanisms JSON, indications JSON,
+    faers_top JSON, faers_total INTEGER, us_label JSON, us_label_meta JSON, us_name VARCHAR, fetched_at TIMESTAMP
+);

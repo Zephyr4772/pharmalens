@@ -10,6 +10,36 @@ from ..common import SORTS, cleanrows, csv_response, ids, paged
 
 router = APIRouter(tags=["catalog"])
 
+
+def maybe(cur, sql: str, params=None) -> list[dict]:
+    """Rows from a table a connector creates on first run; empty until it has."""
+    import duckdb
+    try:
+        return db.rows(cur, sql, params)
+    except duckdb.CatalogException:
+        return []
+
+
+def has_mol(col: str = "molecule_ids") -> str:
+    return f"list_contains(string_split({col}, ','), ?)"
+
+
+def enrichment(cur, mid: int) -> dict | None:
+    e = maybe(cur, "SELECT * FROM molecule_enrichment WHERE molecule_id = ?", [mid])
+    if not e:
+        return None
+    e = e[0]
+    for k in ("atc", "mechanisms", "indications", "faers_top", "us_label", "us_label_meta"):
+        if isinstance(e.get(k), str):
+            e[k] = json.loads(e[k])
+    return e
+
+
+def procurement(cur, where: str, params: list, limit: int = 60) -> list[dict]:
+    return maybe(cur, f"""SELECT buyer, state, item_code, item, kind, unit, rate, gst, level, supplier, company_id, tender_no,
+                                 valid_from, valid_to, category, order_share, source_url FROM procurement_rates
+                          WHERE {where} ORDER BY buyer, item, (level = 'L1') DESC, rate LIMIT {limit}""", params)
+
 PRODUCT_COLS = """
     p.id, p.name, p.mrp, p.mrp_asof, p.unit_price, p.pack_size, p.dosage_form, p.composition,
     p.combo_id, p.therapeutic_class, p.rx_required, p.is_discontinued, p.in_stock, p.source_count,
@@ -159,6 +189,21 @@ def product(pid: int):
     p["ban"] = db.rows(cur, "SELECT id, combo_text, notification, notified_on, status, source_url FROM reg_banned_fdc WHERE id = ?", [p["ban_id"]]) if p["ban_id"] else []
     p["related_bans"] = db.rows(cur, """SELECT id, combo_text, notification, notified_on, status FROM reg_banned_fdc
                                         WHERE mkey = (SELECT mkey FROM combos WHERE id = ?) AND id IS DISTINCT FROM ?""", [p["combo_id"], p["ban_id"]]) if p["combo_id"] else []
+    # licensing: CDSCO Rule 84AB brand-name registry entries for this brand stem
+    stem = norm(p["name"]).split(" ")[0] if p.get("name") else None
+    regs = maybe(cur, """SELECT firm_name, license_number, generic_name, brand_name FROM brand_registry
+                         WHERE brand_norm = ? OR brand_norm LIKE ? ORDER BY (brand_norm = ?) DESC LIMIT 200""",
+                 [stem, f"{stem} %", stem]) if stem and len(stem) >= 3 else []
+    # same stem is not enough ("Dolo 650" vs "Dolo Gel"): the declared generic must name one of this product's molecules
+    words = [norm(m["name"]).split(" ")[0][:6] for m in p["molecules"] if m.get("name")]
+    p["brand_registry"] = [r for r in regs if any(w and w in norm(r["generic_name"] or "") for w in words)][:15] if words else regs[:15]
+    # government procurement benchmark: tenders for exactly these molecules
+    if mids:
+        conds = " AND ".join([has_mol()] * len(mids))
+        p["procurement"] = procurement(cur, f"{conds} AND len(string_split(molecule_ids, ',')) = ?", [str(m) for m in mids] + [len(mids)], 40)
+    else:
+        p["procurement"] = []
+    p["pharmacology"] = enrichment(cur, mids[0]) if len(mids) == 1 else None
     return cleanrows([p])[0]
 
 
@@ -196,7 +241,7 @@ def jan_aushadhi_for(cur, mids: list[int], n: int, strengths: list[str] | None =
     conds = " AND ".join(["list_contains(string_split(molecule_ids, ','), ?)"] * len(mids))
     rows = db.rows(cur, f"""
         SELECT drug_code, name, unit_size, mrp, group_name FROM jan_aushadhi
-        WHERE {conds} AND len(string_split(molecule_ids, ',')) = ? ORDER BY mrp LIMIT 60""", [str(m) for m in mids] + [n])
+        WHERE {conds} AND len(string_split(molecule_ids, ',')) = ? AND mrp > 0 ORDER BY mrp LIMIT 60""", [str(m) for m in mids] + [n])
     nums = [re.findall(r"\d+(?:\.\d+)?", s or "") for s in (strengths or [])]
     nums = [x[0] for x in nums if x]
     fam = FORM_FAMILY.get((form or "").strip().lower())
@@ -259,6 +304,8 @@ def combo(cid: int):
     fam = {"oral liquid": "syrup", "topical": None, "unspecified": None, "eye/ear drops": "drop",
            "powder/granules": "powder"}.get(c.get("form_family"), c.get("form_family"))
     c["jan_aushadhi"] = jan_aushadhi_for(cur, mids, len(mids), [m["strength"] for m in c["molecules"]], fam)
+    c["procurement"] = procurement(cur, " AND ".join([has_mol()] * len(mids)) + " AND len(string_split(molecule_ids, ',')) = ?",
+                                   [str(m) for m in mids] + [len(mids)]) if mids else []
     c["related"] = db.rows(cur, """SELECT id, label, product_count, min_mrp, median_mrp FROM combos
                                    WHERE mkey = ? AND id <> ? ORDER BY product_count DESC LIMIT 20""", [c["mkey"], cid])
     return cleanrows([c])[0]
@@ -318,7 +365,7 @@ def molecule(mid: int):
     m["share"] = share_table(cur, "molecule", str(mid))
     m["stats"] = db.one(cur, "SELECT * FROM segment_stats WHERE segment_type='molecule' AND segment = ?", [str(mid)])
     m["nppa_ceiling"] = db.rows(cur, "SELECT form_strength, ceiling_price, unit, notification, year, source FROM nppa_ceiling WHERE molecule_id = ? ORDER BY year DESC", [mid])
-    m["jan_aushadhi"] = db.rows(cur, "SELECT drug_code, name, unit_size, mrp, group_name FROM jan_aushadhi WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY mrp LIMIT 20", [str(mid)])
+    m["jan_aushadhi"] = db.rows(cur, "SELECT drug_code, name, unit_size, mrp, group_name FROM jan_aushadhi WHERE list_contains(string_split(molecule_ids, ','), ?) AND mrp > 0 ORDER BY mrp LIMIT 20", [str(mid)])
     m["nsq"] = db.rows(cur, """SELECT alert_month, category, product_text, batch_no, manufacturer, reason, lab, source_url
                                FROM reg_nsq WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY alert_month DESC NULLS LAST LIMIT 50""", [str(mid)])
     m["bans"] = db.rows(cur, "SELECT combo_text, notification, notified_on, status FROM reg_banned_fdc WHERE list_contains(string_split(mkey, '|'), ?) ORDER BY notified_on DESC NULLS LAST", [m["mkey"]])
@@ -334,6 +381,30 @@ def molecule(mid: int):
     m["forms"] = db.rows(cur, """SELECT p.dosage_form, count(*) n, median(p.mrp) median_mrp FROM products p
                                  JOIN product_molecules pm ON pm.product_id = p.id WHERE pm.molecule_id = ? AND p.dosage_form IS NOT NULL
                                  GROUP BY 1 ORDER BY 2 DESC LIMIT 12""", [mid])
+    k = str(mid)
+    m["pharmacology"] = enrichment(cur, mid)
+    m["procurement"] = procurement(cur, has_mol(), [k])
+    m["global"] = {
+        "us_applications": maybe(cur, f"""SELECT a.application_number, a.sponsor, a.app_type, a.brands, a.dosage_forms, a.marketing_status,
+                                                 a.first_approval, a.last_action, pa.name AS parent, pa.slug AS parent_slug
+                                          FROM us_applications a LEFT JOIN parents pa ON pa.id = a.parent_id
+                                          WHERE {has_mol('a.molecule_ids')} ORDER BY (a.parent_id IS NOT NULL) DESC, a.last_action DESC NULLS LAST LIMIT 60""", [k]),
+        "us_patents": maybe(cur, f"""SELECT application_number, kind, code, use_code, expires_on, ingredients FROM us_patents
+                                     WHERE {has_mol()} AND (expires_on IS NULL OR expires_on >= current_date) ORDER BY expires_on LIMIT 40""", [k]),
+        "us_ndc": (maybe(cur, f"""SELECT count(*) n, count(DISTINCT labeler) labelers, count(*) FILTER (WHERE parent_id IS NOT NULL) indian_group_ndcs,
+                                         list(DISTINCT pa.name) FILTER (WHERE pa.name IS NOT NULL) indian_groups
+                                  FROM us_ndc u LEFT JOIN parents pa ON pa.id = u.parent_id WHERE {has_mol('u.molecule_ids')}""", [k]) or [None])[0],
+        "who_pq": maybe(cur, f"""SELECT ref, inn, applicant, dosage_form, therapeutic_area, basis, prequalified_on FROM who_pq
+                                 WHERE {has_mol()} ORDER BY prequalified_on DESC NULLS LAST LIMIT 30""", [k]),
+        "ema": maybe(cur, f"SELECT * FROM ema_medicines WHERE {has_mol()} LIMIT 20", [k]),
+    }
+    m["cdci"] = maybe(cur, """SELECT identifier, substance_name, cas_number, unii, molecular_formula, molecular_weight, iupac_name,
+                                     substance_description, toxicity FROM cdci_substance WHERE molecule_id = ? LIMIT 3""", [mid])
+    m["cdci_generics"] = maybe(cur, """SELECT generic_name, therapeutic_role, classification_of_drugs, indication, contra_indication, interaction_with_drugs
+                                       FROM cdci_generic WHERE list_contains(string_split(substance_identifier, '+'), ?)
+                                       ORDER BY (indication IS NULL), length(generic_name) LIMIT 25""", [m["cdci"][0]["identifier"]]) if m["cdci"] else []
+    m["brand_registry_count"] = (maybe(cur, "SELECT count(*) n, count(DISTINCT firm_name) firms FROM brand_registry WHERE generic_name ILIKE ?",
+                                       [f"%{m['name']}%"]) or [None])[0]
     return cleanrows([m])[0]
 
 
@@ -401,6 +472,16 @@ def parent(slug: str):
                                WHERE parent_id = ? ORDER BY meeting_date DESC LIMIT 40""", [p["id"]])
     p["trials"] = db.rows(cur, """SELECT nct_id, ctri_id, title, phase, status, india_sites, last_update FROM trials
                                   WHERE parent_id = ? ORDER BY last_update DESC LIMIT 40""", [p["id"]])
+    p["filings"] = maybe(cur, """SELECT announced_at, category, text, attachment, topic FROM corp_announcements
+                                 WHERE parent_id = ? ORDER BY announced_at DESC LIMIT 60""", [p["id"]])
+    p["us_portfolio"] = (maybe(cur, """SELECT count(*) applications, count(*) FILTER (WHERE app_type = 'ANDA') andas,
+                                              count(*) FILTER (WHERE app_type = 'NDA') ndas, count(*) FILTER (WHERE app_type = 'BLA') blas,
+                                              max(last_action) last_action FROM us_applications WHERE parent_id = ?""", [p["id"]]) or [None])[0]
+    p["us_recent"] = maybe(cur, """SELECT application_number, app_type, brands, ingredients, dosage_forms, marketing_status, first_approval, last_action
+                                   FROM us_applications WHERE parent_id = ? ORDER BY last_action DESC NULLS LAST LIMIT 25""", [p["id"]])
+    p["us_ndc_count"] = (maybe(cur, "SELECT count(*) n FROM us_ndc WHERE parent_id = ?", [p["id"]]) or [{"n": 0}])[0]["n"]
+    p["who_pq"] = maybe(cur, """SELECT ref, inn, dosage_form, therapeutic_area, prequalified_on FROM who_pq
+                                WHERE parent_id = ? ORDER BY prequalified_on DESC NULLS LAST LIMIT 30""", [p["id"]])
     return cleanrows([dossier(cur, "parent", p["id"], p)])[0]
 
 
@@ -441,4 +522,12 @@ def dossier(cur, owner_type: str, owner_id: int, base: dict) -> dict:
         SELECT p.id, p.name, p.mrp, p.ban_level, k.label FROM products p JOIN companies c ON c.id = p.company_id
         LEFT JOIN combos k ON k.id = p.combo_id WHERE {comp_filter} AND p.ban_level IS NOT NULL
         AND coalesce(p.is_discontinued, false) = false ORDER BY p.ban_level, p.name LIMIT 100""", [owner_id])
+    base["tenders"] = maybe(cur, f"""
+        SELECT r.buyer, r.item, r.unit, r.rate, r.level, r.order_share, r.tender_no, r.valid_to, r.category
+        FROM procurement_rates r JOIN companies c ON c.id = r.company_id WHERE {comp_filter}
+        ORDER BY (r.level = 'L1') DESC, r.buyer, r.item LIMIT 80""", [owner_id])
+    base["licences"] = maybe(cur, f"""
+        SELECT b.license_number, count(*) brands, any_value(b.firm_name) firm
+        FROM brand_registry b JOIN companies c ON c.id = b.company_id WHERE {comp_filter}
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 40""", [owner_id])
     return base

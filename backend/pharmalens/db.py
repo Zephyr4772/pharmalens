@@ -70,5 +70,9 @@ def close():
     global _conn
     with _conn_lock:
         if _conn is not None:
+            try:
+                _conn.execute("CHECKPOINT")
+            except Exception:  # noqa: BLE001
+                pass
             _conn.close()
             _conn = None

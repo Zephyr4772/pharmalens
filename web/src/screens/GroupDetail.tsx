@@ -4,6 +4,7 @@ import { crore, day, get, num, signed, type Row } from "../lib/api";
 import { Dossier } from "../components/Dossier";
 import { ErrorBox, Kpi, LineChart, Loading, Panel, Star } from "../components/ui";
 import { Outcome } from "./Pipeline";
+import { Filings, Licences, Tenders, UsPortfolio } from "../components/Depth";
 
 export default function GroupDetail() {
   const { slug } = useParams();
@@ -29,7 +30,9 @@ export default function GroupDetail() {
         <Kpi label="Market cap" value={d.market_cap ? crore(d.market_cap) : "—"} />
         <Kpi label="52w range" value={d.week52_low ? `${d.week52_low.toFixed(0)} – ${d.week52_high.toFixed(0)}` : "—"} />
         <Kpi label="NSQ listings" value={num(d.nsq.length)} tone={d.nsq.length ? "down" : undefined} />
-        <Kpi label="USFDA recalls" value={num(d.usfda.length)} tone={d.usfda.length ? "down" : undefined} />
+        <Kpi label="USFDA actions" value={num(d.usfda.length)} tone={d.usfda.length ? "down" : undefined} />
+        <Kpi label="US FDA applications" value={num(d.us_portfolio?.applications)} sub={d.us_portfolio?.andas ? `${num(d.us_portfolio.andas)} ANDA` : undefined} />
+        <Kpi label="State tenders" value={num(d.tenders?.length)} sub={d.tenders?.length ? `${num(d.tenders.filter((t: Row) => t.level === "L1").length)} as L1` : undefined} />
       </div>
       {d.history?.length > 1 && (
         <Panel title="Share price" sub="1 year, daily close (NSE)"><LineChart data={d.history} x="d" y="close" fmt={(v) => `₹${v.toFixed(0)}`} /></Panel>
@@ -40,7 +43,7 @@ export default function GroupDetail() {
             <tr key={s.id}><td><Link to={`/co/${s.slug}`}>{s.name}</Link></td><td className="num">{num(s.product_count)}</td><td className="num mut">{num(s.molecule_count)} mol</td></tr>
           ))}</tbody></table>
         </Panel>
-        <Panel title="USFDA actions" sub="recalls of India-made products">
+        <Panel title="USFDA actions" sub="recalls, import alerts (66-40 cGMP) and warning letters">
           {d.usfda.length ? d.usfda.map((u: Row, i: number) => <div className="ev" key={i}><span className="ev-time">{day(u.issued_on)}</span><span className="ev-title" title={u.subject}>{u.subject}</span></div>) : <div className="empty">none on record</div>}
         </Panel>
         <Panel title="News">
@@ -60,6 +63,14 @@ export default function GroupDetail() {
               <td title={t.title}>{t.title}</td><td className="mut">{t.phase?.replace(/PHASE/g, "P")}</td><td className="mut">{t.status?.toLowerCase().replace(/_/g, " ")}</td></tr>
           ))}</tbody></table> : <div className="empty">no trials on record</div>}
         </Panel>
+      </div>
+      <div className="grid cols-2">
+        <Filings rows={d.filings} />
+        <UsPortfolio p={d.us_portfolio} recent={d.us_recent} ndc={d.us_ndc_count} pq={d.who_pq} />
+      </div>
+      <div className="grid cols-2">
+        <Tenders rows={d.tenders} />
+        <Licences rows={d.licences} />
       </div>
       <Dossier d={d} />
     </div>

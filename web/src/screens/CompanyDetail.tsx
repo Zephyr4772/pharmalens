@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { get, inr, num } from "../lib/api";
 import { Dossier } from "../components/Dossier";
+import { Licences, Tenders } from "../components/Depth";
 import { ErrorBox, Kpi, Loading, Star } from "../components/ui";
 
 export default function CompanyDetail() {
@@ -25,6 +26,10 @@ export default function CompanyDetail() {
         <Kpi label="Median MRP" value={inr(d.median_mrp)} tone="amber" />
         <Kpi label="NSQ listings" value={num(d.nsq.length)} tone={d.nsq.length ? "down" : undefined} />
         <Kpi label="Banned-FDC SKUs" value={num(d.banned_skus.length)} tone={d.banned_skus.length ? "down" : undefined} />
+      </div>
+      <div className="grid cols-2">
+        <Tenders rows={d.tenders} />
+        <Licences rows={d.licences} />
       </div>
       <Dossier d={d} />
     </div>

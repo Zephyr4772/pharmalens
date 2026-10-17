@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Procurement } from "../components/Depth";
 import { Link, useParams } from "react-router-dom";
 import { day, get, inr, num, type Row } from "../lib/api";
 import { ShareTable } from "../components/Share";
@@ -46,6 +47,7 @@ export default function ComboDetail() {
           </Panel>
         </div>
       </div>
+      <Procurement rows={d.procurement} sub="state tender rates for these molecules (all strengths) — compare against the brand ladder" />
     </div>
   );
 }

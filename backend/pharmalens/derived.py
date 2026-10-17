@@ -181,6 +181,12 @@ MIGRATIONS = [
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS ban_level VARCHAR",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS ban_id BIGINT",
     "ALTER TABLE combos ADD COLUMN IF NOT EXISTS banned_skus INTEGER",
+    "ALTER TABLE reg_approvals ADD COLUMN IF NOT EXISTS composition VARCHAR",
+    "ALTER TABLE reg_approvals ADD COLUMN IF NOT EXISTS dosage_form VARCHAR",
+    "ALTER TABLE reg_approvals ADD COLUMN IF NOT EXISTS sites JSON",
+    "ALTER TABLE reg_approvals ADD COLUMN IF NOT EXISTS division VARCHAR",
+    "ALTER TABLE reg_approvals ADD COLUMN IF NOT EXISTS applied_for VARCHAR",
+    "ALTER TABLE reg_approvals ADD COLUMN IF NOT EXISTS form_id BIGINT",
 ]
 
 
@@ -190,6 +196,9 @@ def migrate():
         cur = db.cursor()
         for sql in MIGRATIONS:
             cur.execute(sql)
+        # DuckDB 1.5 cannot replay ALTER TABLE from the WAL ("GetDefaultDatabase" internal error),
+        # so make the schema change durable in the main file immediately.
+        cur.execute("CHECKPOINT")
 
 
 def refresh_reference(cur):

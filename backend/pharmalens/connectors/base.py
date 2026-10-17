@@ -116,6 +116,11 @@ def execute(conn_cls: type[Connector]) -> dict:
     finally:
         c.close()
     finished = datetime.now()
+    try:
+        with db.WRITE_LOCK:
+            db.cursor().execute("CHECKPOINT")
+    except Exception:  # noqa: BLE001 — a busy checkpoint is retried after the next run
+        pass
     with db.writer() as cur:
         cur.execute(
             """INSERT INTO connector_runs (connector, started_at, finished_at, status, rows_seen, rows_new, events_new, message)

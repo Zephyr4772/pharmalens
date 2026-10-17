@@ -24,6 +24,8 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.get_conn()
+    from ..derived import migrate
+    migrate()
     if os.getenv("PHARMALENS_SCHEDULER", "1") != "0":
         scheduler.start()
     yield
