@@ -103,6 +103,18 @@ Wrong data on a molecule page is worse than none, so every external match must b
 - **US label**: openFDA generic-name spellings are listed first. A spelling counts only if, after removing salts, doses and dosage-form words, it is exactly one ingredient with the molecule's key. Combination and multi-ingredient labels are never used. Among the matching labels, prescription labels and those with more sections win, then the newest. Molecules marketed in the US only in combinations (artemether, sacubitril, tazobactam…) or only as supplements (cholecalciferol) show no label.
 - **FAERS**: counts come from reports listing a single-ingredient product of the molecule, with the same name rule. Each reaction carries a PRR against all of FAERS, flagged as a signal when PRR ≥ 2 with ≥ 3 reports (Evans screening rule). FAERS cannot tie a reaction to one drug in a multi-drug report, so the most co-reported drugs are shown alongside; a reaction driven by a frequent co-medication (e.g. kidney injury in reports that also list omeprazole) is visible as such.
 
+## Reference text and interactions for products without their own label
+
+About 72% of products have no monograph of their own. Their pages show **molecule-level reference text**, labelled as such:
+- the CDCI generic monograph for exactly the product's set of molecules, preferring the same dosage form (an injection is not shown an oral tablet's entry);
+- for single-molecule products, the single-ingredient US prescribing label.
+
+Interaction lists in the source data describe molecules, not brands, so a product without a list shows the list from another brand with exactly the same molecules, marked as such. This lifts structured interaction coverage from about 1% to about a third of products.
+
+## Corporate events
+
+Parent groups follow corporate actions recorded in the seed. JB Chemicals & Pharmaceuticals was amalgamated into Torrent Pharmaceuticals (record date 17 Jul 2026, NSE trading suspended): its companies roll up to Torrent, and its own page keeps its filings and price history. Delisted tickers are not requested from the quote feed.
+
 ## Known limitations
 
 - Catalog MRPs are dated, and the "as of" year is shown everywhere. DrugSetu live prices refresh individual products when they are viewed.

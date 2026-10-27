@@ -334,3 +334,71 @@ def doc_url(href: str) -> str | None:
     if not href:
         return None
     return "https://upmsc.in" + quote(href if href.startswith("/") else "/" + href, safe="/:%")
+
+
+class PvpiAlerts(Connector):
+    name = "pvpi_alerts"
+    title = "PvPI Drug Safety Alerts (IPC)"
+    agency = "IPC / PvPI"
+    schedule = {"trigger": "cron", "day_of_week": "mon", "hour": 9, "minute": 50}
+    description = "Every drug-safety alert issued by India's Pharmacovigilance Programme since March 2016: drug, indication, adverse reaction."
+    URL = "https://ipc.gov.in/images/pvpi/List-of-drug-safety-alerts-issued-by-PvPI.pdf"
+
+    def run(self):
+        import io
+        import pdfplumber
+        pdf = self.get(self.URL, timeout=120).content
+        self.archive(pdf, "pdf", key=f"pvpi-{date.today():%Y%m%d}")
+        rows, month, pending, waiting = [], None, "", []
+        with pdfplumber.open(io.BytesIO(pdf)) as p:
+            for page in p.pages:
+                for table in page.extract_tables():
+                    for raw in table:
+                        c = [re.sub(r"\s+", " ", (x or "")).strip() for x in raw]
+                        if len(c) < 5 or not c[0].isdigit():
+                            continue
+                        if c[1]:
+                            pending = (pending + " " + c[1]).strip() if pending and re.fullmatch(r"\d{4}", c[1]) else c[1]
+                            d = pvpi_date(pending)
+                            if d:
+                                month, pending = d, ""
+                                for r_ in waiting:          # rows that started under the incomplete date
+                                    r_["month"] = d
+                                waiting = []
+                            elif not re.search(r"\d{4}|-\d{2}$", pending):
+                                month = None    # "12th February" — the year is on the next row
+                            else:
+                                raise RuntimeError(f"unparsed PvPI issue date {pending!r} (row {c[0]})")
+                        rows.append({"sno": int(c[0]), "month": month, "drug": fix_mojibake(c[2]), "indication": c[3] or None,
+                                     "reaction": fix_mojibake(c[4])})
+                        if pending:
+                            waiting.append(rows[-1])
+        self.stats.rows_seen = len(rows)
+        if len(rows) < 100:
+            raise RuntimeError(f"PvPI list parse looks wrong ({len(rows)} rows)")
+        with db.writer() as w:
+            for r in rows:
+                key = norm(f"pvpi|{r['drug']}|{r['reaction']}")
+                if w.execute("SELECT 1 FROM pvpi_alerts WHERE dedupe_key = ?", [key]).fetchall():
+                    continue
+                mids = matcher.molecules_in(r["drug"].replace("/", " / "), limit=4)
+                w.execute("""INSERT INTO pvpi_alerts (sno, issue_month, drug_text, indication, reaction, molecule_ids, source_url, dedupe_key, fetched_at)
+                             VALUES (?,?,?,?,?,?,?,?, now())""",
+                          [r["sno"], r["month"], r["drug"], r["indication"], r["reaction"], ",".join(map(str, mids)) or None, self.URL, key])
+                self.stats.rows_new += 1
+                if r["month"] and (date.today() - r["month"]).days <= 120:
+                    self.emit(w, kind="alert", severity="high", ts=r["month"], title=f"PvPI safety alert: {r['drug']} — {r['reaction']}",
+                              body=r["indication"], url=self.URL, entity_type="molecule" if len(mids) == 1 else None,
+                              entity_id=mids[0] if len(mids) == 1 else None, dedupe_key=f"pvpi|{key}", payload={"molecule_ids": mids})
+
+
+def pvpi_date(s: str) -> date | None:
+    """'Mar-16', 'December 2016', '17th October 2017', '31st August, 2020' -> date (day kept when given)."""
+    t = re.sub(r"(\d+)(st|nd|rd|th)\b", r"\1", s.replace(",", " "), flags=re.I)
+    t = re.sub(r"\s+", " ", t).strip()
+    for fmt in ("%b-%y", "%d %B %Y", "%d %b %Y", "%B %Y", "%b %Y"):
+        try:
+            return datetime.strptime(t.title() if "%" in fmt else t, fmt).date()
+        except ValueError:
+            continue
+    return None

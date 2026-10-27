@@ -11,16 +11,23 @@ archives under `data/raw/<connector>/` predate the lake).
 | CDSCO NSQ/spurious portal (`cdscoonline.gov.in/CDSCO/viewPublicNSQDrug`) | Every Not-of-Standard-Quality and spurious batch, central + state labs, structured | 2019 → Aug 2026, monthly | JSON (`reportingYears`, `publicReportingMonths`, `filteredNsqDrugTable`, `filteredSpuriousDrugTable`) | **ingesting** — replaces PDF parsing and the Health Master mirror |
 | CDSCO approvals DB (`cdscoonline.gov.in/CDSCO/cdscoDrugs`) | Every approval: drug, composition, dosage, indication, applicant, all manufacturing sites, division (new drug / SND / biological / FDC), date | 2018 → today (latest 14 Oct 2026) | JSON (`loadDrugApprovals?year&month`, `loadRecentApprovals`) | **ingesting** — supersedes the yearly PDF lists |
 | CDSCO Rule 84AB brand registry (`CDSCO/brandNames`) | Every registered brand name → licensed manufacturer, licence number, generic | live | JSON search (`loadRule84abBrandNames?searchText`), enumerable by 2-letter prefixes | **ingesting** |
-| CDSCO alerts, gazette, FDC bans, SEC, approvals PDFs | see METHODOLOGY | daily | HTML/PDF | ingesting (existing) |
+| CDSCO alerts, gazette, FDC bans, approvals PDFs | see METHODOLOGY | daily | HTML/PDF | ingesting (existing) |
+| CDSCO SEC recommendations | 1,880 committee documents listed back to Jan 2015 | twice daily | PDF | **backfilling to 2015** (250 documents per run, newest first) |
 | NPPA compendium, orders, Authority minutes | ceiling prices, notifications | weekly | encrypted JSON / HTML | ingesting (existing) |
+| NPPA ceiling price history | ceilings notified in 2011, 2015, 2022 (master dataset) + a yearly compendium snapshot | yearly | CSV seed + snapshot | **ingesting** (`nppa_history`) |
 | PMBI Jan Aushadhi | generic MRPs | weekly | JSON | ingesting (existing) |
 | NLEM 2022 | essential medicines | static | PDF | ingested |
 | CDCI — Common Drug Codes for India (NRCeS / C-DAC) | National drug terminology: brands, generics, substances (CAS, UNII, SMILES, InChI), suppliers, dose forms | release 2026-06 (notes 2026-08) | official files need NRCeS registration; 2026-07 copy on GitHub (`dhananjaydpatkar/cdci_graph`) | **ingesting (mirror copy)** — register at nrces.in for the official feed |
-| IPC / PvPI | drug safety alerts, ADR signals, publications | irregular | HTML/PDF | planned |
+| IPC / PvPI drug safety alerts (`List-of-drug-safety-alerts-issued-by-PvPI.pdf`) | all 193 alerts since Mar 2016: drug, indication, adverse reaction, issue date | ~monthly | consolidated PDF table | **ingesting** (`pvpi_alerts`); dates are parsed strictly and a run fails rather than guess a month |
+| IPC / PvPI newsletters, label-change orders | narrative signal reviews | irregular | PDF | candidate |
 | Department of Pharmaceuticals | schemes (PLI, bulk-drug parks), annual reports | quarterly | HTML/PDF | planned |
 | RMSCL Rajasthan rate contracts (`DrugsRC.html`) | ~2,000 active contracts: item, supplier, unit, rate, GST, L1/L2, contract validity | per tender, rechecked Tue/Fri | HTML table | **ingesting** (`rmscl_rates`) |
 | TNMSC Tamil Nadu tenders (`drugtender.php?drugcat=…`) | L1 rate per pack for essential, speciality, veterinary drugs, surgicals and sutures, every matched supplier with order share; current and previous tenders | per tender, rechecked Wed/Sat | HTML (nested tables) | **ingesting** (`tnmsc_rates`) |
-| Kerala KMSCL, other state corporations | procurement prices | per tender | portals redirect / PDF | candidate |
+| HMSCL Haryana rate contracts (`Page.aspx?slug=drugs-surgical-sutures`) | 358 contracts: EDL item, RC number, rate excl. GST, vendor, validity | weekly | HTML (15 pages × 25) | **ingesting** (`hmscl_rates`) |
+| UPMSCL Uttar Pradesh blacklisting (`/Home/NSQ`) | firms debarred for NSQ batches: drug, order no., date, years, order PDF (2023→) | daily | HTML; **blocks cloud IPs**, fetched by the home relay | **ingesting** (`upmscl_debarments` → `firm_debarments`) |
+| HMSCL medicine stock availability | live stock per district / institution | live | ASP.NET form postbacks | candidate |
+| UPMSCL tender results | L1 rates per tender | per tender | PDFs | candidate |
+| Kerala KMSCL, Odisha OSMCL, Telangana TSMSIDC, Karnataka, Bihar, Punjab, AP | procurement prices | per tender | sites unreachable or no public rate list (probed 2026-10-27) | candidate |
 | PIB press releases | government announcements | daily | RSS (all ministries, Hindi by default) | not added — Google News feeds already surface the pharma-relevant releases |
 | ONDLS (state drug licences) | manufacturing/sale licences | live | unreachable (DNS) | blocked |
 | CTRI | Indian trial registry | live | CAPTCHA | not scraped (via ClinicalTrials.gov) |
@@ -30,7 +37,8 @@ archives under `data/raw/<connector>/` predate the lake).
 | Source | What it holds | Access | Status |
 |---|---|---|---|
 | NSE corporate announcements | filings per listed group: results, USFDA observations, M&A, plant actions | JSON (session cookie) | **ingesting** |
-| NSE/Yahoo quotes | prices, history, fundamentals | API | ingesting (existing) |
+| NSE/Yahoo quotes | prices, fundamentals; **full daily history back to 1996** (`nse_history`, 208k closes, split-adjusted) | API | ingesting |
+| GDELT DOC 2.0 news index | Indian pharma coverage since 2017 by topic (CDSCO, NPPA, USFDA, quality, deals, policy) | JSON API, 1 request / 5 s | **backfilling** (`news_archive`, month by month) |
 | BSE announcements | same as NSE | API blocks non-browser clients | blocked |
 
 ## Tier 3 — international regulators (Indian manufacturers abroad)
@@ -67,3 +75,8 @@ archives under `data/raw/<connector>/` predate the lake).
 
 ## Not used
 Live scraping of e-pharmacy sites (1mg, PharmEasy, Netmeds, Apollo): their terms restrict automated collection.
+
+## Relay (sources that block the server)
+Some government sites drop connections from cloud IPs (upmsc.in, from 2026-10-27). A connector declares `relay_url`. The server
+tries directly, and otherwise uses the newest copy uploaded by the home relay (`deploy/relay.ps1`, Windows Task Scheduler) through
+`POST /api/v1/admin/relay/{name}` over Tailscale. Copies older than 8 days are refused, so a stale relay shows up as a feed error.

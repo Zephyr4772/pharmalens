@@ -1,7 +1,7 @@
 from .alerts_job import AlertsDispatch
 from .cdci import Cdci
 from .catalog_sync import NppaHistory, ParentSync
-from .procurement_safety import FdaImportAlert6640, HmsclRates, RmsclRates, TnmscRates, UpmsclDebarments, WhoAlerts
+from .procurement_safety import FdaImportAlert6640, HmsclRates, PvpiAlerts, RmsclRates, TnmscRates, UpmsclDebarments, WhoAlerts
 from .enrichment import MoleculeEnrichment
 from .cdsco_portal import CdscoApprovalsDb, CdscoBrandRegistry, CdscoNsqPortal
 from .cdsco import CdscoAlerts, CdscoBannedFdc, CdscoGazette, CdscoNsq, NsqMirror
@@ -21,6 +21,6 @@ REGISTRY = {c.name: c for c in [
     CdscoApprovals, CdscoSec, Nlem, ClinicalTrialsIndia, NppaCompendium,
     CdscoNsqPortal, CdscoApprovalsDb, CdscoBrandRegistry,
     OpenFdaBulk, WhoPrequal, EmaMedicines, NseFilings, Cdci,
-    ParentSync, NppaHistory, RmsclRates, TnmscRates, HmsclRates, UpmsclDebarments, WhoAlerts, FdaImportAlert6640, MoleculeEnrichment,
+    ParentSync, NppaHistory, PvpiAlerts, RmsclRates, TnmscRates, HmsclRates, UpmsclDebarments, WhoAlerts, FdaImportAlert6640, MoleculeEnrichment,
     AlertsDispatch,
 ]}

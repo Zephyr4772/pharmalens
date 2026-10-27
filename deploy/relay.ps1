@@ -19,3 +19,17 @@ foreach ($p in $sources.PSObject.Properties) {
         Add-Content $log "$(Get-Date -Format s) $($p.Name) failed: $($_.Exception.Message)"
     }
 }
+
+# Off-site copy: pull the newest server backup to D: when the local copy is a week old (keeps 4)
+$bdir = "D:\pharmacopy\backups"
+New-Item -ItemType Directory -Force $bdir | Out-Null
+$latest = Get-ChildItem $bdir -Filter "pharmalens-*.tgz" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $latest -or $latest.LastWriteTime -lt (Get-Date).AddDays(-6)) {
+    $key = "$env:USERPROFILE\.ssh\azure_srv"
+    $name = (& ssh -i $key -o BatchMode=yes -o ConnectTimeout=20 azureuser@srv1 "ls -t /srv/backups/pharmalens-*.tgz | head -1") 2>$null
+    if ($name) {
+        & scp -q -i $key -o BatchMode=yes "azureuser@srv1:$name" $bdir 2>$null
+        Add-Content $log "$(Get-Date -Format s) backup pulled: $name"
+        Get-ChildItem $bdir -Filter "pharmalens-*.tgz" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 4 | Remove-Item -Force
+    } else { Add-Content $log "$(Get-Date -Format s) backup pull skipped (server unreachable)" }
+}

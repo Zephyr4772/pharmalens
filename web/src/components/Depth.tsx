@@ -240,3 +240,14 @@ export function CeilingHistory({ rows }: { rows: Row[] | undefined }) {
     </Panel>
   );
 }
+
+export function PvpiAlerts({ rows }: { rows: Row[] | undefined }) {
+  if (!rows?.length) return null;
+  return (
+    <Panel title="India safety alerts (PvPI)" sub="drug safety alerts issued by the Pharmacovigilance Programme of India for healthcare professionals">
+      <table className="tt"><tbody>{rows.map((r, i) => (
+        <tr key={i}><td>{day(r.issue_month)}</td><td className="neg">{r.reaction}</td><td className="mut" title={r.drug_text}>{r.drug_text}</td>
+          <td className="faint" title={r.indication}>{r.indication}</td></tr>))}</tbody></table>
+    </Panel>
+  );
+}

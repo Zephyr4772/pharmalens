@@ -224,7 +224,12 @@ def build():
         last_mol = dict(con.execute("SELECT mkey, id FROM molecules").fetchall()) or None
     except duckdb.Error:
         last_mol = None
+    import os
+    rebuild_info = os.getenv("PHARMALENS_REBUILD_INFO") == "1" or not con.execute(
+        "SELECT count(*) FROM information_schema.tables WHERE table_name = 'product_info'").fetchall()[0][0]
     for t in CORE_TABLES:
+        if t == "product_info" and not rebuild_info:
+            continue          # keyed by stable product ids; regenerating it is the build's memory peak
         con.execute(f"DROP TABLE IF EXISTS {t}")
     con.execute((SEED_DIR.parent / "schema.sql").read_text())
 
@@ -414,6 +419,25 @@ def build():
         seen.add((l[0], l[1]))
         uniq_links.append(l)
     links = uniq_links
+    # spellings that differ only in spacing are one molecule; the most-linked spelling names it
+    link_count = Counter(k for _, k, _ in links)
+    canon: dict[str, str] = {}
+    for k in sorted(mol_by_key, key=lambda k: (-link_count[k], k)):
+        canon.setdefault(k.replace(" ", ""), k)
+    spacing = {k: canon[k.replace(" ", "")] for k in mol_by_key if canon[k.replace(" ", "")] != k}
+    if spacing:
+        seen = set()
+        relinked = []
+        for pid, k, st in links:
+            k = spacing.get(k, k)
+            if (pid, k) not in seen:
+                seen.add((pid, k))
+                relinked.append((pid, k, st))
+        links = relinked
+        for k in spacing:
+            mol_by_key.pop(k, None)
+    log(f"spacing variants merged: {len(spacing):,}")
+    repairer.canon = lambda k: canon.get(k.replace(" ", ""), k)
     mol_ids = stable_ids(sorted(mol_by_key), old_mol)
     log(f"molecules: {len(mol_ids):,}, links: {len(links):,}; repairs: {dict(repairer.stats)}")
 
@@ -643,8 +667,11 @@ def build():
         con.execute("INSERT OR IGNORE INTO id_registry (kind, key, id) SELECT kind, key, id FROM _ids")
         con.unregister("_ids")
 
-    from .product_info import build as build_product_info
-    build_product_info(con)
+    if rebuild_info:
+        from .product_info import build as build_product_info
+        build_product_info(con)
+    else:
+        log("product_info kept (set PHARMALENS_REBUILD_INFO=1 to regenerate)")
 
     # indexes for API latency
     for sql in [
@@ -703,6 +730,7 @@ def remap_live_molecules(con, old_mol: dict, mol_ids: dict, repairer):
         targets = []
         for nm in repairer.repair(k):
             nk = molecule_key(nm)
+            nk = getattr(repairer, "canon", lambda x: x)(nk)
             if nk in mol_ids and mol_ids[nk] not in targets:
                 targets.append(mol_ids[nk])
         remap[oid] = targets

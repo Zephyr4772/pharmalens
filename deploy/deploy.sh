@@ -2,7 +2,7 @@
 # Ship the committed code (plus the built web UI) to the server and restart the container. Data is untouched.
 # Usage (Git Bash, repo root): deploy/deploy.sh
 set -euo pipefail
-HOST=${PHARMALENS_HOST:-azureuser@172.198.57.15}
+HOST=${PHARMALENS_HOST:-azureuser@srv1}   # over Tailscale: not limited by the home-IP firewall rule
 KEY=${PHARMALENS_KEY:-~/.ssh/azure_srv}
 TMP=${TMPDIR:-/d/pharmacopy/tmp}/deploy
 mkdir -p "$TMP"

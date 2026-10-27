@@ -507,3 +507,9 @@ CREATE TABLE IF NOT EXISTS nppa_ceiling_history (
     year INTEGER, molecule_id INTEGER, molecule_name VARCHAR, form_strength VARCHAR, ceiling_price DOUBLE, unit VARCHAR,
     notification VARCHAR, source VARCHAR
 );
+
+-- India's Pharmacovigilance Programme (IPC) drug safety alerts since 2016
+CREATE TABLE IF NOT EXISTS pvpi_alerts (
+    sno INTEGER, issue_month DATE, drug_text VARCHAR, indication VARCHAR, reaction VARCHAR, molecule_ids VARCHAR,
+    source_url VARCHAR, dedupe_key VARCHAR UNIQUE, fetched_at TIMESTAMP
+);

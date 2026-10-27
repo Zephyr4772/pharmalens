@@ -6,7 +6,7 @@ import { ShareTable } from "../components/Share";
 import { ErrorBox, Kpi, Loading, Pager, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 import { Outcome } from "./Pipeline";
-import { CeilingHistory, Debarments, GlobalRegs, Pharmacology, Procurement } from "../components/Depth";
+import { CeilingHistory, Debarments, GlobalRegs, Pharmacology, Procurement, PvpiAlerts } from "../components/Depth";
 
 export default function MoleculeDetail() {
   const { id } = useParams();
@@ -41,6 +41,7 @@ export default function MoleculeDetail() {
         <Kpi label="US FDA applications" value={num(d.global?.us_applications?.length)} sub={d.global?.us_ndc?.n ? `${num(d.global.us_ndc.n)} NDCs` : undefined} />
       </div>
       <Pharmacology e={d.pharmacology} />
+      <PvpiAlerts rows={d.pvpi} />
       <div className="grid cols-3">
         <Panel title="Market share" sub="by group/company, estimated value" className="span-2"><ShareTable rows={d.share} stats={d.stats} /></Panel>
         <div className="stack">
