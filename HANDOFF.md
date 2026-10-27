@@ -105,6 +105,7 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 4. USFDA warning letters (fda.gov blocks curl; import alerts are done via accessdata.fda.gov). More state procurement (KMSCL Kerala, others), WHO DDD values, PvPI signal reports.
 
 ## Gotchas
+- **TLS.** Every feed verifies certificates (`pharmalens/tls.py`, `tls.CONTEXT`); never add `verify=False`. nppa.gov.in sends an incomplete chain, so Sectigo's DV R36 intermediate is pinned in `pharmalens/certs/` (it only helps reach public roots). If another site fails with 'unable to get local issuer certificate', pin its intermediate the same way (download from the URL in its certificate, check it with `openssl verify` against certifi). Revocation is checked weekly over OCSP by health_watch (errors retried hourly); nppaipdms.gov.in has served a certificate revoked as 'superseded' since 19 Oct 2026 (NPPA's slip, low risk).
 - **Port 8010.** Another local app (node) uses 8000 on this machine.
 - **NPPA compendium** client (`connectors/nppa_dashboard.py`) reproduces the dashboard's AES+RSA request wrapping; needs Origin/Referer headers or the CSRF call returns 'Session Expired'.
 - **DuckDB is single-writer.** Stop the server before `build_core`. CLI connector runs delegate to the server when it is up.
