@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ago, day, get, num, post, type Row } from "../lib/api";
 import { Kpi, Loading, Panel } from "../components/ui";
+import { useMe } from "../state/me";
 
 function schedule(s: Row) {
   if (s.trigger === "interval") return `every ${s.minutes ?? s.hours} ${s.minutes ? "min" : "h"}`;
@@ -10,6 +11,7 @@ function schedule(s: Row) {
 
 export default function Feeds() {
   const qc = useQueryClient();
+  const { owner } = useMe();
   const f = useQuery({ queryKey: ["feeds"], queryFn: () => get<{ data: Row[] }>("/meta/feeds"), refetchInterval: 15_000 });
   const b = useQuery({ queryKey: ["build"], queryFn: () => get<Record<string, string>>("/meta/build") });
   const run = useMutation({
@@ -37,8 +39,8 @@ export default function Feeds() {
               <td className="num">{num(x.rows_new)}</td><td className="num">{num(x.events_new)}</td>
               <td className="mut">{x.next_run ? new Date(x.next_run).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
               <td className="mut" title={x.message ?? ""}>{x.message}</td>
-              <td><button disabled={x.running || (run.isPending && run.variables === x.name)} onClick={() => run.mutate(x.name)}>
-                {run.isPending && run.variables === x.name ? "…" : "RUN"}</button></td>
+              <td>{owner && <button disabled={x.running || (run.isPending && run.variables === x.name)} onClick={() => run.mutate(x.name)}>
+                {run.isPending && run.variables === x.name ? "…" : "RUN"}</button>}</td>
             </tr>
           ))}</tbody>
         </table>

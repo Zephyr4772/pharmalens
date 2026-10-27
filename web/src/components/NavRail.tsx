@@ -1,5 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useLive } from "../state/live";
+import { useMe } from "../state/me";
 
 export const NAV = [
   { key: "1", name: "MKT", path: "/", title: "Market monitor" },
@@ -21,10 +22,11 @@ export function NavRail() {
   const nav = useNavigate();
   const loc = useLocation();
   const unseen = useLive((s) => s.unseen);
+  const { owner } = useMe();
   const active = (p: string) => (p === "/" ? loc.pathname === "/" : loc.pathname.startsWith(p));
   return (
     <nav className="rail">
-      {NAV.map((it) => (
+      {NAV.filter((it) => owner || it.path !== "/alerts").map((it) => (
         <div key={it.path} title={it.title} className={"rail-item" + (active(it.path) ? " active" : "")} onClick={() => nav(it.path)}>
           <span className="rail-key">{it.key.toUpperCase()}</span>
           <span className="rail-name">{it.name}</span>

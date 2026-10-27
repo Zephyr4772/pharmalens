@@ -11,6 +11,8 @@ services:
     environment:
       # 2 GB VM shared with other projects: keep DuckDB small, spill to disk
       PHARMALENS_DUCKDB_MEMORY: 600MB
+      # admin + alert endpoints only for the Tailscale logins in PHARMALENS_OWNERS (.env); fail closed if missing
+      PHARMALENS_REQUIRE_OWNER: "1"
     volumes:
       - ./data:/app/data
       - ./.env:/app/.env:ro

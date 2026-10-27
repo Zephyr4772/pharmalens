@@ -42,6 +42,34 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
                    allow_methods=["*"], allow_headers=["*"])
 
 
+# Owner-only endpoints. The server is reached only through `tailscale serve`, which stamps each request with the
+# signed-in Tailscale user (and drops any client-sent copy of that header). Guests (people the server is shared
+# with) can read everything else; no header means guest. PHARMALENS_OWNERS unset = local dev, everyone is owner,
+# unless PHARMALENS_REQUIRE_OWNER=1 (the server), where a missing list locks the owner-only endpoints for everyone.
+OWNERS = {o.strip().lower() for o in os.getenv("PHARMALENS_OWNERS", "").split(",") if o.strip()}
+REQUIRE_OWNER = os.getenv("PHARMALENS_REQUIRE_OWNER") == "1"
+OWNER_ONLY = ("/api/v1/admin/", "/api/v1/alerts/")
+
+
+def is_owner(request: Request) -> bool:
+    if not OWNERS:
+        return not REQUIRE_OWNER
+    return request.headers.get("tailscale-user-login", "").lower() in OWNERS
+
+
+@app.middleware("http")
+async def owner_gate(request: Request, call_next):
+    if request.url.path.startswith(OWNER_ONLY) and not is_owner(request):
+        return JSONResponse(status_code=403, content={"detail": "owner only"})
+    return await call_next(request)
+
+
+@app.get("/api/v1/me", include_in_schema=False)
+def me(request: Request):
+    return {"login": request.headers.get("tailscale-user-login"), "name": request.headers.get("tailscale-user-name"),
+            "owner": is_owner(request)}
+
+
 @app.exception_handler(db.DatabaseUnavailable)
 def db_unavailable(request: Request, exc: db.DatabaseUnavailable):
     return JSONResponse(status_code=503, content={"detail": str(exc)})

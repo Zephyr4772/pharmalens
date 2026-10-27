@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ago, get, type Row } from "../lib/api";
 import { useWatchlist } from "../state/watchlist";
+import { useMe } from "../state/me";
 import { Empty, Kpi, Loading, Panel, Sev, Tabs } from "../components/ui";
 
 type Tab = "inbox" | "subs" | "new";
@@ -19,6 +20,13 @@ function savedShelfCsv(): string {
 }
 
 export default function Alerts() {
+  const me = useMe();
+  if (!me.loaded) return <Loading />;
+  if (!me.owner) return <Empty>Alerts and subscriptions are the owner's. Everything else in the terminal is open to you.</Empty>;
+  return <OwnerAlerts />;
+}
+
+function OwnerAlerts() {
   const [tab, setTab] = useState<Tab>("inbox");
   const [editing, setEditing] = useState<Row | null>(null);
   const subs = useQuery({ queryKey: ["alert-subs"], queryFn: () => get("/alerts/subscriptions") });

@@ -3,11 +3,13 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { get } from "../lib/api";
 import { useLive } from "../state/live";
+import { useMe } from "../state/me";
 
 export function TopBar({ onOpenPalette }: { onOpenPalette: () => void }) {
   const [now, setNow] = useState(new Date());
   const connected = useLive((s) => s.connected);
-  const unread = useQuery({ queryKey: ["alert-unread"], queryFn: () => get("/alerts/inbox", { unread: true, limit: 1 }), refetchInterval: 60_000 });
+  const { owner } = useMe();
+  const unread = useQuery({ queryKey: ["alert-unread"], queryFn: () => get("/alerts/inbox", { unread: true, limit: 1 }), refetchInterval: 60_000, enabled: owner });
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
@@ -34,7 +36,7 @@ export function TopBar({ onOpenPalette }: { onOpenPalette: () => void }) {
         <kbd>CTRL</kbd><kbd>K</kbd>
       </button>
       <div className="topbar-right">
-        <Link to="/alerts" className={`bell ${unread.data?.unread ? "hot" : ""}`} title="Alerts">🔔{unread.data?.unread ? <b>{unread.data.unread}</b> : null}</Link>
+        {owner && <Link to="/alerts" className={`bell ${unread.data?.unread ? "hot" : ""}`} title="Alerts">🔔{unread.data?.unread ? <b>{unread.data.unread}</b> : null}</Link>}
         <span className={`mkt-pill ${open ? "open" : ""}`}>NSE {open ? "OPEN" : "CLOSED"}</span>
         <span className={`mkt-pill ${connected ? "open" : "down"}`}>{connected ? "● LIVE" : "○ RECONNECTING"}</span>
         <span className="topbar-clock">{d} · IST <b>{ist}</b></span>
