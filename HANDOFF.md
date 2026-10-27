@@ -72,6 +72,15 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
    CDCI only moves when its source updates (GitHub mirror of the 2026-07 release unless `CDCI_BASE_URL` is set).
 4. **Price freshness beyond NPPA** — candidates to verify: GeM (Government e-Marketplace) listings, NPPA IPDMS
    Form V price lists, manufacturers' published MRP lists. No e-pharmacy scraping.
+   **Assessed 2026-10-27:** GeM = generic government offer prices ("Brand: NA", fixed CPSE prices), not brand MRPs;
+   at most a procurement benchmark. Pharma Sahi Daam / IPDMS (nppaipdms.gov.in) serves a **revoked TLS
+   certificate** (CRYPT_E_REVOKED); not probed further. NB the existing `nppa_compendium` client already uses
+   verify=False against that host — integrity risk, needs an owner decision. **Manufacturer Form V price lists are
+   the real source**: Ipca publishes full lists on ipca.com (590 products; test: 54 matched SKUs had no MRP in our
+   catalog, 19/86 moved >5%). Netmeds hosts an index of ~285 manufacturers' statutory Form V documents (2024–2026),
+   incl. ~35 complete "New GST" lists from Sept 2025 (Cipla, Lupin, Sun, Torrent, Abbott, Zydus, Macleods, Leeford,
+   Ajanta, Eris, Menarini, Sanofi, Natco…) and monthly lists (USV, Emcure, Ipca, Zuventus, Gennova). These are
+   manufacturers' documents, but on an e-pharmacy domain: **owner decision pending** before using them.
 5. Then: retire `drugsetu_harvest` / `drugsetu_launches` and the product page's DrugSetu live lookup.
 
 ## Next candidates
