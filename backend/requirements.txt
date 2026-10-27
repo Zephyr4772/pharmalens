@@ -12,3 +12,4 @@ apscheduler>=3.10,<4
 rapidfuzz>=3.9
 python-dotenv>=1.0
 orjson>=3.10
+openpyxl>=3.1
