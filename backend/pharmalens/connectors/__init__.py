@@ -2,6 +2,7 @@ from .alerts_job import AlertsDispatch
 from .cdci import Cdci
 from .catalog_sync import NppaHistory, ParentSync
 from .health import HealthWatch
+from .pulse import Pulse
 from .procurement_safety import FdaImportAlert6640, HmsclRates, PvpiAlerts, RmsclRates, TnmscRates, UpmsclDebarments, WhoAlerts
 from .enrichment import MoleculeEnrichment
 from .cdsco_portal import CdscoApprovalsDb, CdscoBrandRegistry, CdscoNsqPortal
@@ -23,5 +24,5 @@ REGISTRY = {c.name: c for c in [
     CdscoNsqPortal, CdscoApprovalsDb, CdscoBrandRegistry,
     OpenFdaBulk, WhoPrequal, EmaMedicines, NseFilings, Cdci,
     ParentSync, NppaHistory, PvpiAlerts, RmsclRates, TnmscRates, HmsclRates, UpmsclDebarments, WhoAlerts, FdaImportAlert6640, MoleculeEnrichment,
-    AlertsDispatch, HealthWatch,
+    AlertsDispatch, HealthWatch, Pulse,
 ]}
