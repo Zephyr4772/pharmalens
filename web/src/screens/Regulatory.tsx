@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { csvUrl, day, get, inr, num, type Row } from "../lib/api";
 import { Bar, Empty, ErrorBox, Kpi, Loading, Pager, Panel, Tabs } from "../components/ui";
+import { NppaTable } from "../components/Depth";
 
-type Tab = "nsq" | "bans" | "docs" | "usfda" | "ja" | "ceiling" | "nlem" | "shortage";
+type Tab = "nsq" | "bans" | "docs" | "usfda" | "ja" | "ceiling" | "launch" | "nlem" | "shortage";
 
 export default function Regulatory() {
   const [sp, setSp] = useSearchParams();
@@ -45,7 +46,7 @@ export default function Regulatory() {
       </div>
       <Tabs<Tab> value={tab} onChange={(t) => setSp({ tab: t })} tabs={[
         ["nsq", "NSQ & SPURIOUS BATCHES"], ["bans", "PROHIBITED FDCs"], ["docs", "CDSCO / NPPA DOCUMENTS"],
-        ["usfda", "USFDA RECALLS"], ["ja", "JAN AUSHADHI"], ["ceiling", "NPPA CEILING PRICES"], ["nlem", "NLEM 2022"], ["shortage", "SHORTAGES"],
+        ["usfda", "USFDA RECALLS"], ["ja", "JAN AUSHADHI"], ["ceiling", "NPPA CEILING PRICES"], ["launch", "NPPA LAUNCH PRICES"], ["nlem", "NLEM 2022"], ["shortage", "SHORTAGES"],
       ]} />
       {tab === "nsq" && <NsqTab month={sp.get("month") ?? undefined} offenders={s.data.repeat_offenders} />}
       {tab === "bans" && <BansTab />}
@@ -53,6 +54,7 @@ export default function Regulatory() {
       {tab === "usfda" && <UsfdaTab />}
       {tab === "ja" && <JaTab />}
       {tab === "ceiling" && <CeilingTab />}
+      {tab === "launch" && <LaunchPriceTab />}
       {tab === "nlem" && <NlemTab />}
       {tab === "shortage" && <ShortageTab />}
     </div>
@@ -230,6 +232,27 @@ function JaTab() {
         <thead><tr><th>Code</th><th>Generic</th><th>Unit</th><th className="num">MRP</th><th>Group</th></tr></thead>
         <tbody>{r.data?.data.map((j: Row) => <tr key={j.drug_code}><td className="mut">{j.drug_code}</td><td>{j.name}</td><td>{j.unit_size}</td><td className="num amb">{inr(j.mrp)}</td><td className="mut">{j.group_name}</td></tr>)}</tbody>
       </table>
+      <Pager meta={r.data?.meta} page={page} setPage={setPage} />
+    </Panel>
+  );
+}
+
+function LaunchPriceTab() {
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState("");
+  const [page, setPage] = useState(1);
+  const r = useQuery({ queryKey: ["nppa-retail", q, kind, page], queryFn: () => get("/reg/nppa-retail", { q, kind, page, limit: 80 }) });
+  return (
+    <Panel title="NPPA launch prices — new drugs" sub="official retail price per unit NPPA fixes before a new drug is sold (Gazette S.O., since 2019), excluding GST"
+      right={<a href={csvUrl("/reg/nppa-retail", { q, kind })}>CSV ⤓</a>}>
+      <div className="filterbar inline">
+        <input placeholder="formulation or company" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+        <select value={kind} onChange={(e) => { setKind(e.target.value); setPage(1); }}>
+          <option value="">all notices</option>
+          {r.data?.kinds?.map((k: Row) => <option key={k.kind} value={k.kind}>{k.kind.replace(/_/g, " ")} ({num(k.n)})</option>)}
+        </select>
+      </div>
+      {r.data?.data?.length ? <NppaTable rows={r.data.data} /> : <Empty>{r.isLoading ? "loading…" : "no notified prices match"}</Empty>}
       <Pager meta={r.data?.meta} page={page} setPage={setPage} />
     </Panel>
   );

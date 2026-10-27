@@ -245,6 +245,14 @@ def product(pid: int):
                 info[k] = json.loads(info[k])
     p["label"] = info
     p["price_history"] = db.rows(cur, "SELECT observed_on, mrp, source FROM price_observations WHERE product_id = ? ORDER BY observed_on", [pid])
+    # official launch prices NPPA fixed for the same molecules; this product's own marketer or group first
+    p["nppa_notified"] = maybe(cur, """
+        SELECT n.notified_on, n.so_number, n.kind, n.formulation, n.strength, n.unit, n.price, n.marketer, n.doc_url,
+               c.slug AS company_slug, (n.company_id = ?) AS same_company, (c.parent_id = ?) AS same_group
+        FROM nppa_retail_prices n LEFT JOIN companies c ON c.id = n.company_id
+        WHERE n.molecule_ids = ?
+        ORDER BY (n.company_id = ?) DESC NULLS LAST, (c.parent_id = ?) DESC NULLS LAST, n.notified_on DESC LIMIT 12""",
+        [p["company_id"], p["parent_id"], ",".join(map(str, sorted(mids))), p["company_id"], p["parent_id"]]) if mids else []
     p["nppa_ceiling"] = db.rows(cur, f"""
         SELECT molecule_name, form_strength, ceiling_price, unit, notification, year FROM nppa_ceiling
         WHERE molecule_id IN ({','.join('?' * len(mids))}) ORDER BY year DESC""", mids) if mids else []

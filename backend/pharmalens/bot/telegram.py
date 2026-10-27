@@ -66,7 +66,9 @@ Data notes:
   raw name is a placeholder ("Under Investigation", "Not known", blank).
 - molecule_ids columns are comma-separated ids of molecules.id: use list_contains(string_split(molecule_ids, ','), '<id>').
 - reg_nsq.alert_month is 'YYYY-MM' text. connector_runs logs every feed run. events is the alert tape.
-- news(published_at, source, title, url, topic, parent_ids); quotes holds the latest NSE prices."""
+- news(published_at, source, title, url, topic, parent_ids); quotes holds the latest NSE prices.
+- nppa_retail_prices: official launch price per unit (excl. GST) NPPA fixed for new drugs since 2019, with
+  formulation, strength, unit, manufacturer, marketer, company_id, molecule_ids (sorted), notified_on, so_number."""
 
 
 def chunks(text: str, size: int = 3800) -> list[str]:

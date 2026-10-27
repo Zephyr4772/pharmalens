@@ -68,6 +68,35 @@ export function Pharmacology({ e, compact = false }: { e: Row | null | undefined
   );
 }
 
+const NPPA_KIND: Record<string, string> = { new_drug: "new drug", without_prior_approval: "launched w/o approval", revision: "revised" };
+
+export function NppaNotified({ rows, sub, empty = "NPPA has not notified a price for these molecules" }: { rows: Row[] | undefined; sub?: string; empty?: string }) {
+  const list = rows ?? [];
+  return (
+    <Panel title="NPPA notified retail prices" sub={sub ?? "official launch price per unit fixed by NPPA (Gazette S.O.), excluding GST"}>
+      {list.length ? <NppaTable rows={list} /> : <div className="empty">{empty}</div>}
+    </Panel>
+  );
+}
+
+export function NppaTable({ rows }: { rows: Row[] }) {
+  return (
+    <table className="tt">
+      <thead><tr><th>Notified</th><th>Formulation</th><th>Strength</th><th>Unit</th><th className="num">Price</th><th>Marketer</th><th>Type</th><th /></tr></thead>
+      <tbody>{rows.map((r, i) => (
+        <tr key={i}>
+          <td className="mut">{day(r.notified_on)}</td><td title={r.formulation}>{r.formulation}</td>
+          <td className="faint" title={r.strength}>{(r.strength ?? "").slice(0, 70)}</td><td className="mut">{r.unit}</td>
+          <td className="num amb">{inr(r.price)}</td>
+          <td title={r.marketer}>{r.company_slug ? <Link to={`/co/${r.company_slug}`}>{r.marketer}</Link> : r.marketer}
+            {r.same_company ? <span className="badge b-up"> THIS MARKETER</span> : r.same_group ? <span className="badge b-info"> SAME GROUP</span> : null}</td>
+          <td className="faint">{NPPA_KIND[r.kind] ?? r.kind}</td>
+          <td>{r.doc_url && <a href={r.doc_url} target="_blank" rel="noreferrer">S.O. {r.so_number ?? ""}</a>}</td>
+        </tr>))}</tbody>
+    </table>
+  );
+}
+
 export function Procurement({ rows, title = "Government procurement rates", sub }: { rows: Row[] | undefined; title?: string; sub?: string }) {
   const list = rows ?? [];
   return (

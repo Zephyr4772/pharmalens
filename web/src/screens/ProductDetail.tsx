@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BrandRegistry, MoleculeReference, Pharmacology, Procurement } from "../components/Depth";
+import { BrandRegistry, MoleculeReference, NppaNotified, Pharmacology, Procurement } from "../components/Depth";
 import { Link, useParams } from "react-router-dom";
 import { day, get, inr, num, type Row } from "../lib/api";
 import { ErrorBox, Kpi, Loading, Panel, Star } from "../components/ui";
@@ -186,6 +186,7 @@ export default function ProductDetail() {
       <Panel title="Cheapest same-composition brands" sub="per unit"><ProductTable rows={d.equivalents} /></Panel>
       <div className="grid cols-2">
         <Procurement rows={d.procurement} sub="what state medical corporations pay for this composition (per tender pack)" />
+        <NppaNotified rows={d.nppa_notified} sub="official launch price per unit NPPA fixed for these molecules (Gazette S.O.), excluding GST; check strength" />
         <BrandRegistry rows={d.brand_registry} />
       </div>
       {d.pharmacology && <Pharmacology e={d.pharmacology} />}

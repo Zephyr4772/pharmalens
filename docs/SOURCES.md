@@ -14,6 +14,7 @@ archives under `data/raw/<connector>/` predate the lake).
 | CDSCO alerts, gazette, FDC bans, approvals PDFs | see METHODOLOGY | daily | HTML/PDF | ingesting (existing) |
 | CDSCO SEC recommendations | 1,880 committee documents listed back to Jan 2015 | twice daily | PDF | **backfilling to 2015** (250 documents per run, newest first) |
 | NPPA compendium, orders, Authority minutes | ceiling prices, notifications | weekly | encrypted JSON / HTML | ingesting (existing) |
+| NPPA retail price notifications (new drugs) | official per-unit launch price, strength, manufacturer / marketer, Gazette S.O.; 2019 onwards (~3,500 prices) | twice daily | Gazette PDF (English table) | **ingesting** (`nppa_retail_prices`) |
 | NPPA ceiling price history | ceilings notified in 2011, 2015, 2022 (master dataset) + a yearly compendium snapshot | yearly | CSV seed + snapshot | **ingesting** (`nppa_history`) |
 | PMBI Jan Aushadhi | generic MRPs | weekly | JSON | ingesting (existing) |
 | NLEM 2022 | essential medicines | static | PDF | ingested |

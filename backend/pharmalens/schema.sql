@@ -174,6 +174,25 @@ CREATE TABLE IF NOT EXISTS reg_banned_fdc (
     fetched_at     TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS nppa_retail_prices (   -- official retail prices NPPA fixes for new drugs (DPCO 2013 para 5/15)
+    key          VARCHAR PRIMARY KEY,  -- doc url | serial | marketer index
+    notified_on  DATE,
+    so_number    VARCHAR,              -- Gazette S.O. number, e.g. '4264(E)'
+    kind         VARCHAR,              -- new_drug | without_prior_approval | revision
+    title        VARCHAR,
+    doc_url      VARCHAR,
+    sl_no        VARCHAR,
+    formulation  VARCHAR,
+    strength     VARCHAR,
+    unit         VARCHAR,
+    manufacturer VARCHAR,
+    marketer     VARCHAR,
+    company_id   INTEGER,              -- the marketer, resolved to companies.id
+    price        DOUBLE,               -- per unit, excluding GST
+    molecule_ids VARCHAR,              -- sorted, comma-separated molecules.id
+    fetched_at   TIMESTAMP
+);
+
 CREATE SEQUENCE IF NOT EXISTS seq_docs START 1;
 CREATE TABLE IF NOT EXISTS reg_documents (   -- regulator notices/circulars/gazette/price orders
     id           BIGINT DEFAULT nextval('seq_docs') PRIMARY KEY,

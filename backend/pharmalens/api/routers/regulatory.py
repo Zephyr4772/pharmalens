@@ -147,6 +147,32 @@ def jan_aushadhi(q: str | None = None, group: str | None = None, page: int = 1, 
     return paged(total, page, limit, data, groups=cleanrows(groups))
 
 
+@router.get("/nppa-retail")
+def nppa_retail(q: str | None = None, kind: str | None = None, company_id: int | None = None, page: int = 1,
+                limit: int = Query(80, le=1000), format: str = "json"):
+    """Official retail prices NPPA fixed for new drugs (Gazette S.O.), newest first."""
+    where, args = ["1=1"], []
+    if q:
+        where.append("(lower(n.formulation) LIKE ? OR lower(n.marketer) LIKE ? OR lower(n.manufacturer) LIKE ?)")
+        args += [f"%{q.lower()}%"] * 3
+    if kind:
+        where.append("n.kind = ?"); args.append(kind)
+    if company_id:
+        where.append("n.company_id = ?"); args.append(company_id)
+    w = " AND ".join(where)
+    sql = f"""SELECT n.notified_on, n.so_number, n.kind, n.formulation, n.strength, n.unit, n.price, n.manufacturer,
+                     n.marketer, c.name AS company, c.slug AS company_slug, n.molecule_ids, n.doc_url
+              FROM nppa_retail_prices n LEFT JOIN companies c ON c.id = n.company_id
+              WHERE {w} ORDER BY n.notified_on DESC, try_cast(n.sl_no AS INT), n.marketer"""
+    cur = db.cursor()
+    if format == "csv":
+        return csv_response(db.rows(cur, sql + " LIMIT 100000", args), "nppa_retail_prices")
+    total = cur.execute(f"SELECT count(*) FROM nppa_retail_prices n WHERE {w}", args).fetchone()[0]
+    data = db.rows(cur, sql + " LIMIT ? OFFSET ?", args + [limit, (page - 1) * limit])
+    kinds = db.rows(cur, "SELECT kind, count(*) n FROM nppa_retail_prices GROUP BY 1 ORDER BY 2 DESC")
+    return paged(total, page, limit, data, kinds=cleanrows(kinds))
+
+
 @router.get("/nppa-ceiling")
 def nppa_ceiling(q: str | None = None, limit: int = Query(200, le=2000)):
     cur = db.cursor()

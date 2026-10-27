@@ -58,6 +58,11 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 2. **Official launch prices** — parse NPPA retail-price notifications / draft price calculation sheets
    (`reg_documents.doc_type = 'draft_price_sheet'`, 88 PDFs, newest 2026-10-19) into per-pack prices with company,
    formulation and date; add them to `price_observations` and the catalog.
+   **Done 2026-10-27:** `nppa_retail_prices` feed parses the final Gazette notifications (current list + archive,
+   2019 onwards; drafts skipped, Hindi-only editions give 0 rows): ~3,550 prices, 98% molecule-matched, 73% to a
+   company. Shown on product pages (same molecules, own marketer/group first), REG desk "NPPA launch prices" tab,
+   one launch event per new notification. Not written into catalog MRPs: they are per-unit, pre-GST ceilings for
+   that marketer, not pack MRPs. Next: item 3.
 3. **New-launch detection** — weekly diff of the CDSCO brand registry (Rule 84AB, 90k brands, licence + generic name)
    and CDCI brands (93k, `last_updated_on`) to emit launch events; replaces DrugSetu's newest-first listing.
 4. **Price freshness beyond NPPA** — candidates to verify: GeM (Government e-Marketplace) listings, NPPA IPDMS
