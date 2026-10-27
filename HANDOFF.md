@@ -30,6 +30,7 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
 - Layout: `/srv/<project>/{app,data,.env,docker-compose.yml}` (multi-project host; F1 goes in next). PharmaLens listens on 127.0.0.1:8010 inside the VM only.
 - Deploy: build `web/dist`, ship `git archive` plus `web/dist` to `/srv/pharmalens/app`, then `docker compose up -d --build`. `deploy/Dockerfile` and `deploy/docker-compose.yml` are in the repo.
 - **The VM is the live copy.** Do not run the laptop server with its scheduler against the same data. Catalog rebuilds happen on the laptop: copy `/srv/pharmalens/data/pharmalens.duckdb` down, rebuild, copy it back with the container stopped.
+- Access: Tailscale only (private; tailnet account sinhalz4772@gmail.com). The dashboard is https://srv1.tailf3b6bc.ts.net, set up with `tailscale serve --bg --https=443 http://127.0.0.1:8010`; nothing is exposed publicly. Add more projects with `tailscale serve --https=<port>` or path prefixes.
 - Backups: `/srv/bin/backup.sh` runs daily at 04:30 IST (app paused ~40 s) and keeps 7 nights in `/srv/backups`.
 - All feeds were tested from the Azure IP on 2026-10-27 and none are blocked (CDSCO, NPPA incl. the encrypted dashboard, NSE, RMSCL, TNMSC, FDA, WHO).
 
