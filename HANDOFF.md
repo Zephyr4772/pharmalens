@@ -24,6 +24,15 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
 - **DrugSetu**: trial key in `.env` (5 items/page, ~1 req/s, limited quota). `drugsetu_harvest` copies the full catalog (resumable cursor in `drugsetu_state`) into `drugsetu_products` + `data/sources/drugsetu/*.jsonl.gz`; build_core merges it into the catalog; product pages fall back to the saved copy. On quota/auth refusal the API is paused 6 h (`drugsetu_state.paused_until`).
 - **Catalog**: rebuilt after the last pattern change; nothing pending.
 
+## Server (live copy since 2026-10-27)
+- Azure for Students VM `srv1`, resource group `srv-rg`, India South Central (the subscription allows only uaenorth, eastasia, indiasouthcentral, koreacentral, indonesiacentral). B1ms (1 vCPU, 2 GB) with 4 GB swap, Ubuntu 24.04, Docker. About $19/month.
+- SSH: `ssh -i ~/.ssh/azure_srv azureuser@172.198.57.15`. Port 22 is open only to the home IP (NSG rule `ssh-home`); update the rule when that IP changes. Azure CLI is at `D:\pharmacopy	oolszcli\Scriptsz.bat`; the university tenant requires MFA login.
+- Layout: `/srv/<project>/{app,data,.env,docker-compose.yml}` (multi-project host; F1 goes in next). PharmaLens listens on 127.0.0.1:8010 inside the VM only.
+- Deploy: build `web/dist`, ship `git archive` plus `web/dist` to `/srv/pharmalens/app`, then `docker compose up -d --build`. `deploy/Dockerfile` and `deploy/docker-compose.yml` are in the repo.
+- **The VM is the live copy.** Do not run the laptop server with its scheduler against the same data. Catalog rebuilds happen on the laptop: copy `/srv/pharmalens/data/pharmalens.duckdb` down, rebuild, copy it back with the container stopped.
+- Backups: `/srv/bin/backup.sh` runs daily at 04:30 IST (app paused ~40 s) and keeps 7 nights in `/srv/backups`.
+- All feeds were tested from the Azure IP on 2026-10-27 and none are blocked (CDSCO, NPPA incl. the encrypted dashboard, NSE, RMSCL, TNMSC, FDA, WHO).
+
 ## Next candidates
 0. Register at nrces.in for official CDCI files (`CDCI_BASE_URL`). Review leftover one-product junk molecules (e.g. brand glued to a molecule: 'Vensat Bioamoxycillin').
 1. CTRI direct (search is CAPTCHA-protected; currently via ClinicalTrials.gov cross-registration). SEC rows from committees with non-standard tables (~107 'other').
