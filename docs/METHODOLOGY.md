@@ -118,7 +118,7 @@ Parent groups follow corporate actions recorded in the seed. JB Chemicals & Phar
 ## Known limitations
 
 - Catalog MRPs are dated, and the "as of" year is shown everywhere. DrugSetu live prices refresh individual products when they are viewed.
-- SEC outcomes are classified from the recommendation wording; ambiguous text is marked "noted". Read the linked PDF for the full recommendation.
+- SEC agenda tables come in at least five layouts (4 to 12 columns, merged cells, layouts changing mid-document). Numbered rows are read as serial / drug / firm / recommendation from their filled cells; partial rows are placed by the nearest heading. Outcomes are classified by intent: an explicit grant wins even with conditions attached, while "recommended that the firm should…" means more data is required (deferred). Ambiguous text stays "noted"; read the linked PDF for the full recommendation.
 - US data (shortages, FAERS, labels) describe the US market and are labelled as such. FAERS counts are spontaneous reports: they show what gets reported, not how often reactions happen.
 - Procurement rates are matched to molecules by name only; a rate's pack (e.g. 10×10 tablets) must be read before comparing with retail MRP.
 - The brand registry is matched to products by brand stem (first word of the name), so common stems can show more than one declaration.

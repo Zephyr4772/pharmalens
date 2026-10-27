@@ -140,6 +140,31 @@ OUTCOMES = [
     ("recommended", r"recommended for (the )?grant|recommended (the )?grant|recommended for approval|recommended to grant|recommended for permission|committee recommended|recommended for waiver|recommended the"),
     ("deferred", r"required to submit|should submit|further review|deferred|directed|opined that the firm|asked the firm|to present|clarif"),
 ]
+# Outcome of an SEC agenda item, by intent. An explicit grant wins even when conditions follow ("... subject to the
+# firm should submit ..."); a recommendation *that the firm do more* is not a grant ("recommended that the firm should
+# first conduct phase III" = more data required), so those phrases are tested before the generic "recommended".
+SEC_GRANT = re.compile(r"recommended (?:for )?(?:the )?(?:grant|approval|permission|waiver|import|marketing authori[sz]ation|registration)"
+                       r"|recommended to grant|recommended for (?:the )?(?:conduct|approval)|recommended (?:for )?(?:the )?grant"
+                       r"|recommended (?:to|for) (?:the )?(?:manufacture|market|import|complete|continue|approve|accept|allow|permit|waive|update)"
+                       r"|recommended (?:to|for) (?:the )?conduct[^.]{0,200}(?:with the conditions?|subject to)", re.I)
+SEC_MORE = re.compile(r"recommended that the (?:firm|applicant|sponsor|company) (?:should|may|must|has to|to)|should (?:first )?(?:conduct|submit|generate|present|provide|revise|carry out)"
+                      r"|required to (?:submit|conduct|generate|present)|asked (?:the firm )?to (?:submit|conduct|present)|bridging (?:study|trial)"
+                      r"|further (?:review|data|deliberation)|deferred|re-?present|clarification|not (?:yet )?(?:satisfactory|adequate)", re.I)
+
+
+def sec_outcome(text: str) -> str:
+    t = text or ""
+    if re.search(OUTCOMES[0][1], t, re.I):
+        return "not_recommended"
+    if SEC_GRANT.search(t):
+        return "recommended"
+    if SEC_MORE.search(t):
+        return "deferred"
+    if re.search(OUTCOMES[1][1], t, re.I):
+        return "recommended"
+    return "noted"
+
+
 DIVISIONS = [
     ("clinical_trial", r"\bgct\b|clinical trial|\bct division"),
     ("new_drug", r"new drug|\bsnd\b|subsequent new"),
@@ -207,7 +232,61 @@ class CdscoSec(Connector):
     backfill_days = 365 * 12        # the listing goes back to 2015
     per_run = 250                   # each document is a PDF to fetch and parse: the backlog clears over a few runs
 
+    OUTCOME_RULES = "v3"
+
+    def reclassify(self):
+        key = f"sec_outcome_rules|{self.OUTCOME_RULES}"
+        cur = db.cursor()
+        if cur.execute("SELECT 1 FROM connector_state WHERE key = ?", [key]).fetchall():
+            return
+        rows = cur.execute("SELECT dedupe_key, recommendation, outcome FROM sec_items").fetchall()
+        changed = [(sec_outcome(rec), k) for k, rec, old in rows if sec_outcome(rec) != old]
+        with db.writer() as w:
+            w.executemany("UPDATE sec_items SET outcome = ? WHERE dedupe_key = ?", changed)
+            w.execute("INSERT OR REPLACE INTO connector_state VALUES (?, ?)", [key, datetime.now().isoformat()])
+        self.stats.notes.append(f"outcome rules {self.OUTCOME_RULES}: {len(changed)} of {len(rows)} items reclassified")
+
+    PARSER = "v2"           # header-aware column mapping (6-column layouts from 2022)
+    reparse_per_run = 300
+
+    def reparse(self):
+        cur = db.cursor()
+        done = {r[0] for r in cur.execute("SELECT key FROM connector_state WHERE key LIKE ?", [f"secparse|{self.PARSER}|%"]).fetchall()}
+        docs = cur.execute("""SELECT url, title, published_on FROM reg_documents WHERE doc_type = 'sec_recommendation'
+                              ORDER BY published_on DESC""").fetchall()
+        todo = [d for d in docs if f"secparse|{self.PARSER}|{d[0]}" not in done][: self.reparse_per_run]
+        if not todo:
+            return
+        changed = 0
+        for url, title, published in todo:
+            pdf = cdsco_file(self, url)
+            rows = self.parse(pdf) if pdf else None
+            with db.writer() as w:
+                if rows:
+                    old = w.execute("SELECT meeting_date, committee FROM sec_items WHERE source_url = ? LIMIT 1", [url]).fetchall()
+                    meeting, committee = (old[0] if old else (published, (title or "").split(":")[0]))
+                    w.execute("DELETE FROM sec_items WHERE source_url = ?", [url])
+                    for r in rows:
+                        if not r["drug"].strip() and not r["rec"].strip():
+                            continue
+                        key = norm(f"{url}|{r['file_no']}|{r['drug'][:80]}")
+                        if w.execute("SELECT 1 FROM sec_items WHERE dedupe_key = ?", [key]).fetchall():
+                            continue
+                        pid = matcher.parent_for(re.sub(r"^\s*m\s*/\s*s\.?\s*", "", r["firm"] or "", flags=re.I))
+                        division = refine_division(r["division"], r["drug"], r["rec"], committee)
+                        w.execute("""INSERT INTO sec_items (meeting_date, committee, division, file_no, drug_text, firm, recommendation,
+                                     outcome, molecule_ids, company_id, parent_id, source_url, dedupe_key, fetched_at)
+                                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, now())""",
+                                  [meeting, committee, division, r["file_no"], r["drug"], r["firm"], r["rec"][:4000], sec_outcome(r["rec"]),
+                                   ids_str(matcher.molecules_in(r["drug"], limit=6)), matcher.company_for(r["firm"]), pid, url, key])
+                    changed += 1
+                w.execute("INSERT OR REPLACE INTO connector_state VALUES (?, ?)", [f"secparse|{self.PARSER}|{url}", datetime.now().isoformat()])
+        left = len(docs) - len(done) - len(todo)
+        self.stats.notes.append(f"re-parsed {changed} documents with parser {self.PARSER}" + (f"; {left} left" if left > 0 else ""))
+
     def run(self):
+        self.reparse()
+        self.reclassify()
         html = self.get(CDSCO + "/opencms/opencms/en/Committees/SEC/").text
         items = []
         for tr in LexborHTMLParser(html).css("table tr"):
@@ -250,7 +329,7 @@ class CdscoSec(Connector):
                     if not r["drug"].strip() and not r["rec"].strip():
                         continue
                     r["division"] = refine_division(r["division"], r["drug"], r["rec"], it["committee"])
-                    outcome = classify(r["rec"], OUTCOMES) or "noted"
+                    outcome = sec_outcome(r["rec"])
                     w.execute("""INSERT INTO sec_items (meeting_date, committee, division, file_no, drug_text, firm, recommendation,
                                  outcome, molecule_ids, company_id, parent_id, source_url, dedupe_key, fetched_at)
                                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, now())""",
@@ -268,8 +347,25 @@ class CdscoSec(Connector):
 
     @staticmethod
     def parse(pdf: bytes) -> list[dict]:
+        """Agenda tables come in many layouts (4 columns; 6, 7, 9 or 12 with merged cells, data often left of its heading;
+        layouts can change mid-document). A numbered row normally has exactly four filled cells (serial, drug, firm,
+        recommendation), taken in order whatever the columns. Other rows are placed by the nearest heading of a header
+        seen for that table width (classic 4-column positions otherwise)."""
         recs: list[dict] = []
         division = None
+        labels_by_width: dict[int, dict] = {}
+
+        def labels_for(w):
+            return labels_by_width.get(w) or ({"drug": 1, "firm": 2, "rec": 3} if w == 4 else None)
+
+        def place(cells, labels):
+            out = {"drug": [], "firm": [], "rec": []}
+            for i, c in enumerate(cells):
+                if c:
+                    k = min(labels, key=lambda k: (abs(labels[k] - i), -labels[k]))
+                    out[k].append(c)
+            return {k: " ".join(v).strip() for k, v in out.items()}
+
         with pdfplumber.open(io.BytesIO(pdf)) as p:
             for page in p.pages:
                 for table in page.extract_tables():
@@ -277,21 +373,45 @@ class CdscoSec(Connector):
                         cells = [(c or "").replace("\n", " ").strip() for c in raw]
                         if len(cells) < 4:
                             continue
-                        joined = " ".join(cells)
-                        if not cells[0] and cells[1] and not any(cells[2:]) and len(cells[1]) < 60:
-                            division = classify(cells[1], DIVISIONS) or division   # "GCT Division" header row
+                        heads = [norm(c) for c in cells]
+                        fi = next((i for i, h in enumerate(heads) if re.match(r"(name of (the )?)?firm|applicant", h)), None)
+                        ri = next((i for i, h in enumerate(heads) if h.startswith("recommendation")), None)
+                        if fi is not None and ri is not None and ri > fi:
+                            di = next((i for i, h in enumerate(heads) if "drug" in h or h.startswith("file")), None)
+                            labels_by_width[len(cells)] = {"drug": di if di is not None and di < fi else max(1, fi - 1), "firm": fi, "rec": ri}
                             continue
-                        if norm(cells[0]).startswith(("s no", "sl no", "s no ")) or "recommendation" in norm(cells[-1])[:20]:
+                        filled = [(i, c) for i, c in enumerate(cells) if c]
+                        if len(filled) == 1 and len(filled[0][1]) < 70 and not re.match(r"^\d+\.?$", filled[0][1]):
+                            d = classify(filled[0][1], DIVISIONS)     # "GCT Division" / "New Drug Division Proposals"
+                            if d:
+                                division = d
+                                continue
+                        if heads[0].startswith(("s no", "sl no")) or heads[-1].startswith("recommendation"):
                             continue
-                        if re.match(r"^\d+\.?$", cells[0]):
-                            recs.append({"drug": cells[1], "firm": cells[2], "rec": [cells[3]], "division": division})
-                        elif recs and not cells[0] and joined.strip():
+                        if {h for h in heads if h} <= {"name strength", "name", "strength", "drug name strength", "a", "no", "agend",
+                                                        "nda", "no.", "institute", "name of firm institute"}:
+                            continue
+                        if not filled:
+                            continue
+                        serial = re.match(r"^\d+\.?$", filled[0][1])
+                        if serial and len(filled) == 4:
+                            drug, firm, rec = filled[1][1], filled[2][1], filled[3][1]
+                        else:
+                            labels = labels_for(len(cells))
+                            if not labels:
+                                continue
+                            rest = [c if not (serial and i == filled[0][0]) else "" for i, c in enumerate(cells)]
+                            f = place(rest, labels)
+                            drug, firm, rec = f["drug"], f["firm"], f["rec"]
+                        if serial:
+                            recs.append({"drug": drug, "firm": firm, "rec": [rec], "division": division})
+                        elif recs and (drug or firm or rec):
                             # continuation across a page break
-                            if cells[1]:
-                                recs[-1]["drug"] += " " + cells[1]
-                            if cells[2]:
-                                recs[-1]["firm"] += " " + cells[2]
-                            recs[-1]["rec"].append(cells[3])
+                            if drug:
+                                recs[-1]["drug"] += " " + drug
+                            if firm:
+                                recs[-1]["firm"] += " " + firm
+                            recs[-1]["rec"].append(rec)
         out = []
         for r in recs:
             raw_drug = re.sub(r"\s+", " ", r["drug"]).strip()
