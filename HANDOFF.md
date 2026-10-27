@@ -34,6 +34,18 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
 - Backups: `/srv/bin/backup.sh` runs daily at 04:30 IST (app paused ~40 s) and keeps 7 nights in `/srv/backups`.
 - All feeds were tested from the Azure IP on 2026-10-27 and none are blocked (CDSCO, NPPA incl. the encrypted dashboard, NSE, RMSCL, TNMSC, FDA, WHO).
 
+## Depth pass (2026-10-27)
+- **Prices:** `nse_history` holds full daily closes back to 1996 (≈245k rows, split-adjusted); group pages have 1Y/5Y/10Y/Max ranges.
+- **SEC:** backfilled to 2015 (1,880 documents). A layout-independent parser re-parses every document (state `secparse|v2|<url>`), and outcome rules v3 reclassify by intent.
+- **Products without labels** (~72%) show CDCI and US-label reference text at molecule level. Interaction lists are shared across brands with identical molecules (~1% → ~33% coverage).
+- **Procurement:** Haryana HMSCL (358 contracts) added to Rajasthan and Tamil Nadu. UP UPMSCL blacklisting goes to `firm_debarments` via the home relay, because upmsc.in blocks cloud IPs.
+- **Groups:** 12 new parent groups (`parent_sync` adds seed groups live). JB Chemicals is amalgamated into Torrent (seed `merged_into`); delisted tickers are skipped by the quote feed.
+- **Safety:** PvPI drug-safety alerts 2016→2026 (193; dates parsed strictly). NPPA ceiling history covers 2011/2015/2022/2026.
+- **News:** `news_archive` backfills GDELT month by month from 2017, about 12 h at its rate limit, every 2 h at :25.
+- **Catalog:** 149 molecule spelling variants merged (5,155 → 5,006). `build_core` now keeps `product_info` (set `PHARMALENS_REBUILD_INFO=1` to regenerate); a rebuild takes ~1 min with no memory peak.
+- **Tools:** `deploy/deploy.sh` (code), `deploy/rebuild.sh` (catalog rebuild cycle against the server database; server stopped meanwhile; old database kept as `.pre-rebuild`), `deploy/relay.ps1` (home relay + weekly backup pull to `D:\pharmacopyackups`). SSH via Tailscale: `ssh -i ~/.ssh/azure_srv azureuser@srv1`.
+- **Waiting on the user:** enable the relay task (one PowerShell command, see the final report); a Telegram bot token for failure alerts.
+
 ## Next candidates
 0. Register at nrces.in for official CDCI files (`CDCI_BASE_URL`). Review leftover one-product junk molecules (e.g. brand glued to a molecule: 'Vensat Bioamoxycillin').
 1. CTRI direct (search is CAPTCHA-protected; currently via ClinicalTrials.gov cross-registration). SEC rows from committees with non-standard tables (~107 'other').
