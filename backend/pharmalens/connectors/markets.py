@@ -109,11 +109,11 @@ class NseHistory(Connector):
         df = pd.concat(frames, ignore_index=True)
         self.stats.rows_seen = len(df)
         with db.writer() as w:
-            before = w.execute("SELECT count(*) FROM quote_history").fetchone()[0]
+            before = w.execute("SELECT count(*) FROM quote_history").fetchall()[0][0]
             w.register("_qh", df)
             w.execute("INSERT OR REPLACE INTO quote_history SELECT ticker, d, close, volume FROM _qh")
             w.unregister("_qh")
-            self.stats.rows_new = w.execute("SELECT count(*) FROM quote_history").fetchone()[0] - before
+            self.stats.rows_new = w.execute("SELECT count(*) FROM quote_history").fetchall()[0][0] - before
         oldest = min(v[0] for v in per.values())
         self.stats.notes.append(f"{len(per)} tickers · earliest {oldest} · {len(df):,} daily closes")
 
