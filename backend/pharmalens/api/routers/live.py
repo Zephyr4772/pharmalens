@@ -54,6 +54,27 @@ async def run_connector(name: str):
     return await run_in_threadpool(scheduler.run_now, name)
 
 
+@router.get("/admin/relay")
+def relay_sources():
+    """Sources the server cannot reach itself; the home relay fetches these and posts them back."""
+    return {name: cls.relay_url for name, cls in REGISTRY.items() if getattr(cls, "relay_url", None)}
+
+
+@router.post("/admin/relay/{name}")
+async def relay_upload(name: str, request: Request):
+    cls = REGISTRY.get(name)
+    if not cls or not getattr(cls, "relay_url", None):
+        raise HTTPException(404, "not a relayed source")
+    body = await request.body()
+    if len(body) < 500 or len(body) > 20_000_000:
+        raise HTTPException(400, "implausible page size")
+    from ...config import RAW_DIR
+    d = RAW_DIR / "relay"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{name}.html").write_bytes(body)
+    return {"stored": name, "bytes": len(body)}
+
+
 @router.post("/admin/maintenance/fix-text")
 def fix_text():
     """One-off repair of mis-decoded regulator titles stored before fix_mojibake existed."""

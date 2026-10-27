@@ -22,6 +22,7 @@ export default function GroupDetail() {
         {d.ticker && <span className="badge b-flag">NSE: {d.ticker}</span>}
         <span className="muted">{d.hq}</span>
         <span className="faint">{d.ownership?.replace("_", " ")}</span>
+        {d.notes && <span className={`badge ${/amalgamated|delisted/i.test(d.notes) ? "b-warn" : "b-mute"}`} title={d.notes}>{d.notes.split(" (")[0]}</span>}
         {d.price != null && <span className="price-big">₹{d.price.toLocaleString("en-IN", { maximumFractionDigits: 2 })}</span>}
         {d.change_pct != null && <span className={d.change_pct >= 0 ? "pos" : "neg"}>{signed(d.change_pct)}</span>}
       </div>

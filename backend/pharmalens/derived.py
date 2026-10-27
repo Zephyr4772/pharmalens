@@ -198,7 +198,10 @@ def migrate():
             cur.execute(sql)
         # DuckDB 1.5 cannot replay ALTER TABLE from the WAL ("GetDefaultDatabase" internal error),
         # so make the schema change durable in the main file immediately.
-        cur.execute("CHECKPOINT")
+        try:
+            cur.execute("CHECKPOINT")
+        except Exception:  # noqa: BLE001 — another write is open; the next connector run checkpoints
+            log.warning("migrate: checkpoint deferred (write in progress)")
 
 
 def refresh_reference(cur):
@@ -211,7 +214,7 @@ def refresh_reference(cur):
 
 
 def refresh_derived():
-    migrate()
+    # schema migrations run once at server start (api lifespan / CLI), not after every feed
     with db.writer() as cur:
         refresh_reference(cur)
         refresh_bans(cur)

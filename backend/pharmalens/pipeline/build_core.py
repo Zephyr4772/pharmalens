@@ -477,6 +477,8 @@ def build():
     log("resolving companies")
     parents_seed = json.loads((SEED_DIR / "parents.json").read_text(encoding="utf-8"))
     parent_rx = [(i + 1, [re.compile(pt) for pt in p["patterns"] + p.get("india_patterns", [])]) for i, p in enumerate(parents_seed)]
+    by_name = {p["name"]: i + 1 for i, p in enumerate(parents_seed)}
+    merged_into = {i + 1: by_name[p["merged_into"]] for i, p in enumerate(parents_seed) if p.get("merged_into") in by_name}
     companies: dict[str, dict] = {}
     for p in products:
         raw = p["manufacturer_raw"]
@@ -493,7 +495,7 @@ def build():
             parent_id = None
             for pid_, rxs in parent_rx:
                 if any(r.search(heavy) or r.search(ck) for r in rxs):
-                    parent_id = pid_
+                    parent_id = merged_into.get(pid_, pid_)
                     break
             c = {"id": len(companies) + 1, "name": raw.strip(), "name_norm": ck, "parent_id": parent_id, "names": Counter()}
             companies[ck] = c

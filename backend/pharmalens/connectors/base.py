@@ -62,6 +62,25 @@ class Connector:
             time.sleep(2 * (i + 1))
         raise last  # type: ignore[misc]
 
+    # sources that refuse the server's (cloud) IP: name -> URL; a home machine uploads copies to the server
+    relay_url: str | None = None
+    relay_max_age_days = 8
+
+    def get_or_relay(self, url: str, **kw) -> str:
+        """Fetch directly; if the source refuses the server, fall back to the latest copy uploaded by the relay."""
+        try:
+            r = self.get(url, retries=1, **kw)
+            if r.status_code == 200 and r.text.strip():
+                return r.text
+        except httpx.HTTPError:
+            pass
+        f = RAW_DIR / "relay" / f"{self.name}.html"
+        if f.exists() and (time.time() - f.stat().st_mtime) < self.relay_max_age_days * 86400:
+            age_h = (time.time() - f.stat().st_mtime) / 3600
+            self.stats.notes.append(f"source blocks the server; using relayed copy ({age_h:.0f} h old)")
+            return f.read_text(encoding="utf-8", errors="replace")
+        raise RuntimeError("source unreachable from the server and no fresh relayed copy (laptop relay not run recently)")
+
     def archive(self, content: bytes | str, ext: str, key: str | None = None) -> str:
         d = RAW_DIR / self.name / datetime.now().strftime("%Y-%m")
         d.mkdir(parents=True, exist_ok=True)

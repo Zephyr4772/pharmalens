@@ -296,7 +296,10 @@
    "^j b chemicals",
    "^jb chemicals",
    "^unique pharmaceutical"
-  ]
+  ],
+  "merged_into": "Torrent Pharmaceuticals",
+  "delisted": "2026-07-17",
+  "notes": "Amalgamated into Torrent Pharmaceuticals (scheme of amalgamation, record date 17 Jul 2026; NSE trading suspended from that date)"
  },
  {
   "name": "Eris Lifesciences",
@@ -705,6 +708,120 @@
   "ownership": "indian_private",
   "patterns": [
    "^raptakos\\b"
+  ]
+ },
+ {
+  "name": "Zee Laboratories",
+  "ticker": null,
+  "hq": "Paonta Sahib",
+  "ownership": "indian_private",
+  "patterns": [
+   "^zee laboratories",
+   "^zeelab"
+  ],
+  "notes": "Zeelab Pharmacy is its retail generics arm"
+ },
+ {
+  "name": "Zota Healthcare",
+  "ticker": "ZOTA",
+  "hq": "Surat",
+  "ownership": "indian_listed",
+  "patterns": [
+   "^zota health ?care",
+   "^davaindia"
+  ],
+  "notes": "Davaindia generic pharmacy chain"
+ },
+ {
+  "name": "Ind-Swift",
+  "ticker": "INDSWFTLAB",
+  "hq": "Chandigarh",
+  "ownership": "indian_listed",
+  "patterns": [
+   "^ind ?swift"
+  ],
+  "notes": "Ind-Swift Ltd and Ind-Swift Laboratories share promoters"
+ },
+ {
+  "name": "Panacea Biotec",
+  "ticker": "PANACEABIO",
+  "hq": "New Delhi",
+  "ownership": "indian_listed",
+  "patterns": [
+   "^panacea biotec"
+  ]
+ },
+ {
+  "name": "Biological E",
+  "ticker": null,
+  "hq": "Hyderabad",
+  "ownership": "indian_private",
+  "patterns": [
+   "^biological e\\b"
+  ]
+ },
+ {
+  "name": "Themis Medicare",
+  "ticker": "THEMISMED",
+  "hq": "Mumbai",
+  "ownership": "indian_listed",
+  "patterns": [
+   "^themis medicare"
+  ]
+ },
+ {
+  "name": "Wanbury",
+  "ticker": "WANBURY",
+  "hq": "Navi Mumbai",
+  "ownership": "indian_listed",
+  "patterns": [
+   "^wanbury"
+  ]
+ },
+ {
+  "name": "Orchid Pharma",
+  "ticker": "ORCHPHARMA",
+  "hq": "Chennai",
+  "ownership": "indian_listed",
+  "patterns": [
+   "^orchid (chemicals|pharma|healthcare)"
+  ],
+  "notes": "formerly Orchid Chemicals & Pharmaceuticals"
+ },
+ {
+  "name": "RPG Life Sciences",
+  "ticker": "RPGLIFE",
+  "hq": "Mumbai",
+  "ownership": "indian_listed",
+  "patterns": [
+   "^rpg life"
+  ]
+ },
+ {
+  "name": "Neon Laboratories",
+  "ticker": null,
+  "hq": "Mumbai",
+  "ownership": "indian_private",
+  "patterns": [
+   "^neon laboratories"
+  ]
+ },
+ {
+  "name": "Centaur Pharmaceuticals",
+  "ticker": null,
+  "hq": "Mumbai",
+  "ownership": "indian_private",
+  "patterns": [
+   "^centaur pharma"
+  ]
+ },
+ {
+  "name": "Psychotropics India",
+  "ticker": null,
+  "hq": null,
+  "ownership": "indian_private",
+  "patterns": [
+   "^psychotropics india"
   ]
  }
 ]

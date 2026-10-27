@@ -287,9 +287,10 @@ class UpmsclDebarments(Connector):
     schedule = {"trigger": "cron", "hour": 10, "minute": 35}
     description = "Firms blacklisted by UP's medical supplies corporation, mostly for NSQ batches: drug, reason, order, date and duration."
     URL = "https://upmsc.in/Home/NSQ"
+    relay_url = URL          # upmsc.in drops connections from cloud IPs
 
     def run(self):
-        html = self.get(self.URL, timeout=60).text
+        html = self.get_or_relay(self.URL, timeout=40)
         self.archive(html, "html", key=f"upmscl-nsq-{date.today():%Y%m%d}")
         rows = []
         for tr in LexborHTMLParser(html).css("table tr"):
@@ -327,7 +328,7 @@ class UpmsclDebarments(Connector):
 
 
 def doc_url(href: str) -> str | None:
-    """UPMSCL links carry JSON-escaped slashes and raw spaces ("/NsqFiles\/x_Office order.pdf")."""
+    """UPMSCL links carry JSON-escaped slashes (a backslash before each slash) and raw spaces."""
     from urllib.parse import quote
     href = (href or "").replace("\\", "").strip()
     if not href:

@@ -33,7 +33,9 @@ class NseQuotes(Connector):
     description = "Last price, change, volume for listed pharma groups and the Nifty Pharma index (15-min delayed)."
 
     def tickers(self) -> dict[str, str]:
-        rows = db.cursor().execute("SELECT ticker, name FROM parents WHERE ticker IS NOT NULL").fetchall()
+        # delisted groups keep their ticker for price history, but there is nothing live to fetch
+        rows = db.cursor().execute("""SELECT ticker, name FROM parents WHERE ticker IS NOT NULL
+                                      AND coalesce(notes, '') NOT ILIKE '%amalgamated into%' AND coalesce(notes, '') NOT ILIKE 'delisted%'""").fetchall()
         out = {f"{t}.NS": n for t, n in rows}
         out.update(INDEXES)
         return out

@@ -427,6 +427,8 @@ def molecule(mid: int):
                                  GROUP BY 1 ORDER BY 2 DESC LIMIT 12""", [mid])
     k = str(mid)
     m["pharmacology"] = enrichment(cur, mid)
+    m["ceiling_history"] = maybe(cur, """SELECT year, form_strength, ceiling_price, unit, notification FROM nppa_ceiling_history
+                                         WHERE molecule_id = ? ORDER BY lower(form_strength), year""", [mid])
     m["debarments"] = maybe(cur, f"""SELECT state, firm, drug_text, reason, ordered_on, years, document_url FROM firm_debarments
                                      WHERE {has_mol()} ORDER BY ordered_on DESC NULLS LAST LIMIT 30""", [k])
     m["procurement"] = procurement(cur, has_mol(), [k])

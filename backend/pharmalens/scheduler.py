@@ -23,7 +23,10 @@ def run_now(name: str) -> dict:
     try:
         res = execute(REGISTRY[name])
         if res.get("rows_new") or res.get("events_new"):
-            refresh_derived()
+            try:
+                refresh_derived()
+            except Exception:  # noqa: BLE001 — derived tables are rebuilt after the next feed; the run itself succeeded
+                log.exception("derived refresh after %s failed", name)
         if res.get("events_new") and name != "alerts_dispatch":
             # push alerts as soon as a feed lands new events instead of waiting for the next tick
             threading.Thread(target=run_now, args=("alerts_dispatch",), daemon=True).start()

@@ -500,3 +500,10 @@ CREATE TABLE IF NOT EXISTS firm_debarments (
     order_no VARCHAR, ordered_on DATE, years DOUBLE, document_url VARCHAR, company_id INTEGER, parent_id INTEGER,
     molecule_ids VARCHAR, source_url VARCHAR, dedupe_key VARCHAR UNIQUE, fetched_at TIMESTAMP
 );
+
+-- Notified ceiling prices by year (NPPA): 2011/2015/2022 notifications from the master dataset + a yearly snapshot of
+-- the official compendium, so price-control history accumulates
+CREATE TABLE IF NOT EXISTS nppa_ceiling_history (
+    year INTEGER, molecule_id INTEGER, molecule_name VARCHAR, form_strength VARCHAR, ceiling_price DOUBLE, unit VARCHAR,
+    notification VARCHAR, source VARCHAR
+);

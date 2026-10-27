@@ -215,3 +215,28 @@ export function Debarments({ rows, showFirm = false }: { rows: Row[] | undefined
     </Panel>
   );
 }
+
+export function CeilingHistory({ rows }: { rows: Row[] | undefined }) {
+  if (!rows?.length) return null;
+  const years = [...new Set(rows.map((r) => r.year))].sort();
+  if (years.length < 2) return null;
+  const byForm = new Map<string, Row>();
+  for (const r of rows) {
+    const k = `${(r.form_strength || "").toLowerCase()} | ${(r.unit || "").toLowerCase()}`;
+    const e = byForm.get(k) ?? { form: r.form_strength, unit: r.unit };
+    e[r.year] = r.ceiling_price;
+    byForm.set(k, e);
+  }
+  const list = [...byForm.values()].filter((e) => years.filter((y) => e[y] != null).length >= 2);
+  if (!list.length) return null;
+  return (
+    <Panel title="Ceiling price history" sub="NPPA notified ceiling per unit — formulations notified in at least two years">
+      <table className="tt">
+        <thead><tr><th>Formulation</th><th>Unit</th>{years.map((y) => <th key={y} className="num">{y}</th>)}</tr></thead>
+        <tbody>{list.slice(0, 40).map((e, i) => (
+          <tr key={i}><td title={e.form}>{e.form}</td><td className="faint">{e.unit}</td>
+            {years.map((y) => <td key={y} className="num amb">{e[y] != null ? inr(e[y]) : ""}</td>)}</tr>))}</tbody>
+      </table>
+    </Panel>
+  );
+}
