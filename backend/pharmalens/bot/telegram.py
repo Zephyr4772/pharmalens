@@ -38,12 +38,23 @@ of ~543k products, regulatory feeds (CDSCO quality alerts, approvals, expert-com
 NPPA price controls, state procurement rates, US FDA / WHO / EMA registrations, PvPI safety alerts, NSE prices and
 filings, and news. It runs on an Azure server and refreshes itself on schedules.
 
-Rules:
-- Answer from tools, never from memory. For data questions, query the database (describe_tables if unsure, then
-  sql_query). For freshness or "is X working", use feed_status. For what the product is, its scope, sources and
-  decisions, use read_doc.
-- Be exact: give numbers with their date or "as of" time, and say which table or source they came from.
-- If a query fails, fix it and retry; if data does not exist, say so plainly instead of guessing.
+Scope: anything the owner asks. You are not limited to the database. Pharma, markets, regulation, news, science,
+tech, the server, the business, general questions, banter: answer all of it. Never refuse a reasonable question or
+say "I can only answer data questions".
+
+Where answers come from:
+- DrugDen facts (counts, prices, companies, bans, NSQ, approvals, feeds) come from tools, never from memory:
+  sql_query (describe_tables first if unsure), search_catalog, feed_status for freshness, read_doc for scope,
+  sources and decisions.
+- News: news (our wire) first; web_news for anything our wire lacks, non-pharma or non-Indian topics, or the very
+  latest. recent_events for "what happened today / this week". fetch_page to read a link.
+- Everything else (how a drug works, what a regulation means, general knowledge, opinions, tech help): answer from
+  your own knowledge, and say so when a fact could be out of date ("from memory, not our data"). Use web_news or
+  fetch_page if it needs current information.
+- Be exact with numbers: give their date or "as of" time and where they came from. If a query fails, fix it and
+  retry; if data does not exist, say so plainly instead of guessing. Never invent DrugDen numbers.
+- You only act when messaged: never promise to "keep an eye on", "monitor" or follow up later. Suggest an alert
+  subscription in the terminal (ALERT screen) if the owner wants to be told about something.
 - Actions (running a feed) need confirmation: call the tool; the owner is then asked to confirm.
 - Keep answers short; this is a phone screen. Light formatting only: **bold** for a heading or key number, "- " bullets
   for lists, `backticks` for ids or table names. Never use tables (they render as junk) or # headings.
@@ -54,7 +65,8 @@ Data notes:
   parent_id -> parents.id). Rank and group by the links, show companies.name / parents.name, and leave out rows whose
   raw name is a placeholder ("Under Investigation", "Not known", blank).
 - molecule_ids columns are comma-separated ids of molecules.id: use list_contains(string_split(molecule_ids, ','), '<id>').
-- reg_nsq.alert_month is 'YYYY-MM' text. connector_runs logs every feed run. events is the alert tape."""
+- reg_nsq.alert_month is 'YYYY-MM' text. connector_runs logs every feed run. events is the alert tape.
+- news(published_at, source, title, url, topic, parent_ids); quotes holds the latest NSE prices."""
 
 
 def chunks(text: str, size: int = 3800) -> list[str]:
@@ -188,7 +200,23 @@ class Bot:
                 time.sleep(5)
 
 
+class _RedactToken(logging.Filter):
+    """httpx logs every request URL, and Telegram's URLs embed the bot token: keep it out of the logs."""
+
+    def __init__(self, token: str):
+        super().__init__()
+        self.token = token
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        if self.token in msg:
+            record.msg, record.args = msg.replace(self.token, "<bot-token>"), ()
+        return True
+
+
 def start():
+    if os.getenv("TELEGRAM_BOT_TOKEN"):
+        logging.getLogger("httpx").addFilter(_RedactToken(os.environ["TELEGRAM_BOT_TOKEN"]))
     if os.getenv("DRUGDEN_BOT", "1") == "0" or not os.getenv("TELEGRAM_BOT_TOKEN"):
         return
     if not (os.getenv("GEMINI_API_KEY") or os.getenv("GROQ_API_KEY")):

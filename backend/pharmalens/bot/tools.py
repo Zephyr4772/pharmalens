@@ -92,6 +92,91 @@ def search_catalog(q: str) -> dict:
     return _json(search(q=q, limit=8))
 
 
+def news(query: str = "", days: int = 14, topic: str = "") -> dict:
+    """Latest stories from our news wire (Indian pharma press + GDELT archive), newest first."""
+    cur = db.cursor()
+    where, args = ["published_at >= now() - to_days(?)"], [max(1, min(int(days or 14), 3650))]
+    if query:
+        where.append("(title ILIKE ? OR coalesce(summary, '') ILIKE ?)")
+        args += [f"%{query}%"] * 2
+    if topic:
+        where.append("topic = ?")
+        args.append(topic.lower())
+    rows = cur.execute(f"""SELECT published_at, source, topic, title, url FROM news WHERE {' AND '.join(where)}
+                           ORDER BY published_at DESC LIMIT 15""", args).fetchall()
+    total = cur.execute(f"SELECT count(*) FROM news WHERE {' AND '.join(where)}", args).fetchall()[0][0]
+    return _json({"matching": total, "stories": [dict(zip(["published", "source", "topic", "title", "url"], r)) for r in rows]})
+
+
+def recent_events(kind: str = "", severity: str = "", hours: int = 48, query: str = "") -> dict:
+    """The alert tape: what the feeds detected recently (bans, NSQ, spurious, recalls, approvals, filings, stock moves...)."""
+    cur = db.cursor()
+    where, args = ["coalesce(detected_at, ts) >= now() - to_hours(?)"], [max(1, min(int(hours or 48), 24 * 365))]
+    if kind:
+        where.append("kind = ?")
+        args.append(kind.lower())
+    if severity:
+        where.append("severity IN (SELECT unnest(string_split(?, ',')))")
+        args.append(severity.lower().replace(" ", ""))
+    if query:
+        where.append("(title ILIKE ? OR coalesce(body, '') ILIKE ?)")
+        args += [f"%{query}%"] * 2
+    w = " AND ".join(where)
+    rows = cur.execute(f"""SELECT ts, kind, severity, title, source, url FROM events WHERE {w}
+                           ORDER BY coalesce(detected_at, ts) DESC LIMIT 25""", args).fetchall()
+    by_kind = cur.execute(f"SELECT kind, count(*) FROM events WHERE {w} GROUP BY 1 ORDER BY 2 DESC", args).fetchall()
+    return _json({"counts_by_kind": dict(by_kind),
+                  "events": [dict(zip(["when", "kind", "severity", "title", "source", "url"], r)) for r in rows]})
+
+
+def web_news(query: str, days: int = 7) -> dict:
+    """Live news search on any topic (Google News RSS, India edition, last N days)."""
+    import xml.etree.ElementTree as ET
+    from urllib.parse import quote
+    import httpx
+    days = max(1, min(int(days or 7), 365))
+    url = f"https://news.google.com/rss/search?q={quote(query)}+when:{days}d&hl=en-IN&gl=IN&ceid=IN:en"
+    r = httpx.get(url, timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 DrugDen/1.0"})
+    if r.status_code != 200:
+        return {"error": f"news search {r.status_code}"}
+    items = ET.fromstring(r.content).findall("./channel/item")[:15]
+    return _json({"articles": [{"date": i.findtext("pubDate"), "source": i.findtext("source"), "title": i.findtext("title"),
+                                "url": i.findtext("link")} for i in items]})
+
+
+def _public_host(host: str) -> bool:
+    import ipaddress
+    import socket
+    try:
+        addrs = {i[4][0] for i in socket.getaddrinfo(host, None)}
+    except OSError:
+        return False
+    return all(ipaddress.ip_address(a.split("%")[0]).is_global for a in addrs)
+
+
+def fetch_page(url: str) -> dict:
+    """Read the text of a public web page (e.g. a link the owner sends, or a source document)."""
+    import re
+    from urllib.parse import urlparse
+    import httpx
+    u = urlparse(url)
+    if u.scheme not in ("http", "https") or not u.hostname or not _public_host(u.hostname):
+        return {"error": "only public http(s) pages can be read"}
+    r = httpx.get(url, timeout=30, follow_redirects=True, headers={"User-Agent": "Mozilla/5.0 DrugDen/1.0"})
+    if r.url.host and not _public_host(r.url.host):
+        return {"error": "redirected to a non-public address"}
+    ctype = r.headers.get("content-type", "")
+    if "pdf" in ctype:
+        return {"status": r.status_code, "note": "this is a PDF; its text is not extracted here", "bytes": len(r.content)}
+    text = r.text
+    if "html" in ctype:
+        text = re.sub(r"(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>", " ", text)
+        text = re.sub(r"(?s)<[^>]+>", " ", text)
+        text = re.sub(r"&nbsp;|&#160;", " ", text)
+        text = re.sub(r"\s+", " ", text)
+    return {"status": r.status_code, "url": str(r.url), "text": text.strip()[:9000]}
+
+
 # ---- actions (confirmation required)
 def run_feed(name: str) -> dict:
     from ..connectors import REGISTRY
@@ -131,6 +216,26 @@ TOOLS = [
     {"name": "search_catalog", "fn": search_catalog,
      "description": "Search products (brands), molecules, combinations, companies and groups by name.",
      "parameters": {"type": "object", "properties": {"q": {"type": "string"}}, "required": ["q"]}},
+    {"name": "news", "fn": news,
+     "description": "Our pharma news wire (Indian trade/business press, refreshed every 15 min, archive back to 2017). "
+                    "Optional text query (company, drug, topic words), days back (default 14), topic (regulatory, pricing, "
+                    "approval, recall, deal, earnings, litigation, supply, policy, quality, general).",
+     "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "days": {"type": "integer"},
+                                                     "topic": {"type": "string"}}}},
+    {"name": "recent_events", "fn": recent_events,
+     "description": "What the feeds detected recently: the alert tape. kind: nsq, spurious, ban, price_notification, "
+                    "approval, recall, launch, usfda, news, stock, shortage, gazette, tender, filing. severity: comma list of "
+                    "critical, high, medium, info. hours back (default 48). Optional text query. Use for 'what happened today'.",
+     "parameters": {"type": "object", "properties": {"kind": {"type": "string"}, "severity": {"type": "string"},
+                                                     "hours": {"type": "integer"}, "query": {"type": "string"}}}},
+    {"name": "web_news", "fn": web_news,
+     "description": "Live news search on any topic (Google News, last N days, default 7). Use when our own wire has "
+                    "nothing, for non-Indian or non-pharma news, or for the very latest.",
+     "parameters": {"type": "object", "properties": {"query": {"type": "string"}, "days": {"type": "integer"}},
+                    "required": ["query"]}},
+    {"name": "fetch_page", "fn": fetch_page,
+     "description": "Read the text of a public web page by URL (a link the owner sent, a news story or a source page).",
+     "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}},
     {"name": "run_feed", "fn": run_feed,
      "description": "Request running a data feed immediately (asks the owner to confirm first). Use the feed name from feed_status.",
      "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},
