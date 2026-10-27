@@ -65,6 +65,11 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
    that marketer, not pack MRPs. Next: item 3.
 3. **New-launch detection** — weekly diff of the CDSCO brand registry (Rule 84AB, 90k brands, licence + generic name)
    and CDCI brands (93k, `last_updated_on`) to emit launch events; replaces DrugSetu's newest-first listing.
+   **Done 2026-10-27:** `brand_first_seen` (connectors/launches.py). The 84AB feed diffs each weekly snapshot (first
+   run replays archived snapshots: 17 Oct = baseline, 27 Oct = 25 arrivals); CDCI records its per-brand date (baseline
+   on first run). One summary launch event per run + one per arrival from a tracked group. PIPE tab "New brand
+   registrations" (NEW vs LISTED in catalog). These are registrations, not launches; export brands appear too.
+   CDCI only moves when its source updates (GitHub mirror of the 2026-07 release unless `CDCI_BASE_URL` is set).
 4. **Price freshness beyond NPPA** — candidates to verify: GeM (Government e-Marketplace) listings, NPPA IPDMS
    Form V price lists, manufacturers' published MRP lists. No e-pharmacy scraping.
 5. Then: retire `drugsetu_harvest` / `drugsetu_launches` and the product page's DrugSetu live lookup.

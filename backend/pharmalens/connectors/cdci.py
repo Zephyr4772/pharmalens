@@ -11,11 +11,12 @@ route masters, then links substances to catalog molecules by name.
 import io
 import os
 import re
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 
-from .. import db
+from .. import db, matcher
+from . import launches
 from ..normalize import molecule_key
 from .base import Connector
 
@@ -70,6 +71,25 @@ class Cdci(Connector):
                 w.execute(f"CREATE TABLE {table} AS SELECT * FROM _cdci")
                 w.unregister("_cdci")
         self.stats.rows_seen = self.stats.rows_new = sum(counts.values())
+        with db.writer() as w:
+            baseline = not w.execute("SELECT 1 FROM brand_first_seen WHERE source = 'cdci' LIMIT 1").fetchone()
+            known = launches._known(w, "cdci")
+            items = []
+            for ident, short, full, lic, firm, updated in w.execute("""
+                    SELECT b.identifier, b.brand_short, b.brand_name, b.license_number, s.supplier_name, b.last_updated_on
+                    FROM cdci_brand b LEFT JOIN cdci_supplier s ON s.identifier = b.supplier_identifier""").fetchall():
+                if ident in known or not short:
+                    continue
+                try:
+                    seen_on = datetime.strptime(updated or "", "%Y%m%d").date()
+                except ValueError:
+                    seen_on = None   # undated: today for a real arrival, unknown for the baseline (see track below)
+                items.append({"key": ident, "brand": short, "firm": firm, "generic": full, "license": lic, "seen_on": seen_on,
+                              "company_id": None if baseline else matcher.company_for(firm)})
+            new = launches.track(w, "cdci", items, None if baseline else date.today(), baseline=baseline)
+            if not baseline:
+                launches.announce(self, w, "CDCI drug terminology", new, date.today())
+            self.stats.notes.append(f"{len(new):,} CDCI brands {'recorded as baseline' if baseline else 'new since the last release'}")
         linked = int(sub["molecule_id"].notna().sum())
         self.stats.notes.append(" · ".join(f"{k.replace('cdci_', '')} {v:,}" for k, v in counts.items())
                                 + f" · {linked:,} substances linked to catalog molecules"

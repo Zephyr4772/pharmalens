@@ -124,3 +124,29 @@ def nlem(q: str | None = None, section: str | None = None, limit: int = Query(10
                             WHERE {' AND '.join(where)} ORDER BY n.section, n.molecule_name LIMIT ?""", args + [limit])
     sections = db.rows(cur, "SELECT section, count(*) n FROM nlem GROUP BY 1 ORDER BY 1")
     return {"data": cleanrows(data), "sections": cleanrows(sections)}
+
+
+@router.get("/new-brands")
+def new_brands(days: int = Query(90, le=3650), source: str | None = None, q: str | None = None, page: int = 1,
+               limit: int = Query(80, le=1000), format: str = "json"):
+    """Brands that appeared in the CDSCO brand registry (since tracking began) or CDCI (by its update date)."""
+    where, args = ["f.first_seen >= current_date - ?", "(NOT f.baseline OR f.source = 'cdci')"], [days]
+    if source:
+        where.append("f.source = ?"); args.append(source)
+    if q:
+        where.append("(lower(f.brand) LIKE ? OR lower(f.firm) LIKE ? OR lower(coalesce(f.generic, '')) LIKE ?)")
+        args += [f"%{q.lower()}%"] * 3
+    w = " AND ".join(where)
+    # in the catalog already = an existing product's name starts with the brand (a new pack, not a new brand)
+    sql = f"""SELECT f.first_seen, f.source, f.brand, f.generic, f.firm, f.license, c.name AS company, c.slug AS company_slug,
+                     pa.name AS parent, pa.slug AS parent_slug,
+                     EXISTS (SELECT 1 FROM products p WHERE p.name_norm = f.brand_norm OR p.name_norm LIKE f.brand_norm || ' %') AS in_catalog
+              FROM brand_first_seen f LEFT JOIN companies c ON c.id = f.company_id LEFT JOIN parents pa ON pa.id = c.parent_id
+              WHERE {w} ORDER BY f.first_seen DESC, f.firm, f.brand"""
+    cur = db.cursor()
+    if format == "csv":
+        return csv_response(db.rows(cur, sql + " LIMIT 100000", args), "new_brand_registrations")
+    total = cur.execute(f"SELECT count(*) FROM brand_first_seen f WHERE {w}", args).fetchone()[0]
+    data = db.rows(cur, sql + " LIMIT ? OFFSET ?", args + [limit, (page - 1) * limit])
+    tracking = cur.execute("SELECT source, min(first_seen) FILTER (WHERE baseline), count(*) FILTER (WHERE NOT baseline) FROM brand_first_seen GROUP BY 1").fetchall()
+    return paged(total, page, limit, data, tracking=[{"source": s, "since": d, "new": n} for s, d, n in tracking])

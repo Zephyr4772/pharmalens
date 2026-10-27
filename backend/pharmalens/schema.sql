@@ -193,6 +193,20 @@ CREATE TABLE IF NOT EXISTS nppa_retail_prices (   -- official retail prices NPPA
     fetched_at   TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS brand_first_seen (   -- when a brand first appeared in a registry: launch / pipeline signal
+    source       VARCHAR,              -- cdsco_84ab (CDSCO brand registry) | cdci (national drug terminology)
+    key          VARCHAR,
+    brand        VARCHAR,
+    brand_norm   VARCHAR,
+    firm         VARCHAR,
+    generic      VARCHAR,
+    license      VARCHAR,
+    company_id   INTEGER,
+    first_seen   DATE,
+    baseline     BOOLEAN,              -- present when tracking began: existing, not new
+    PRIMARY KEY (source, key)
+);
+
 CREATE SEQUENCE IF NOT EXISTS seq_docs START 1;
 CREATE TABLE IF NOT EXISTS reg_documents (   -- regulator notices/circulars/gazette/price orders
     id           BIGINT DEFAULT nextval('seq_docs') PRIMARY KEY,

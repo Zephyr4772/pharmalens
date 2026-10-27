@@ -68,7 +68,9 @@ Data notes:
 - reg_nsq.alert_month is 'YYYY-MM' text. connector_runs logs every feed run. events is the alert tape.
 - news(published_at, source, title, url, topic, parent_ids); quotes holds the latest NSE prices.
 - nppa_retail_prices: official launch price per unit (excl. GST) NPPA fixed for new drugs since 2019, with
-  formulation, strength, unit, manufacturer, marketer, company_id, molecule_ids (sorted), notified_on, so_number."""
+  formulation, strength, unit, manufacturer, marketer, company_id, molecule_ids (sorted), notified_on, so_number.
+- brand_first_seen: when each brand first appeared in the CDSCO 84AB registry (source 'cdsco_84ab') or CDCI;
+  baseline = already there when tracking began (not new). New registrations, not proof of launch."""
 
 
 def chunks(text: str, size: int = 3800) -> list[str]:

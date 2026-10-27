@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { csvUrl, day, get, num, type Row } from "../lib/api";
 import { Bar, ErrorBox, Kpi, Loading, Pager, Panel, Tabs } from "../components/ui";
 
-type Tab = "sec" | "approvals" | "trials";
+type Tab = "sec" | "approvals" | "trials" | "brands";
 
 const OUTCOME_CLASS: Record<string, string> = { recommended: "b-up", not_recommended: "b-down", deferred: "b-warn", noted: "b-mute" };
 const DIV_LABEL: Record<string, string> = {
@@ -56,11 +56,12 @@ export default function Pipeline() {
         </Panel>
       </div>
       <Tabs<Tab> value={tab} onChange={(t) => setSp({ tab: t })} tabs={[
-        ["sec", "SEC RECOMMENDATIONS"], ["approvals", "CDSCO NEW DRUG APPROVALS"], ["trials", "CLINICAL TRIALS (INDIA)"],
+        ["sec", "SEC RECOMMENDATIONS"], ["approvals", "CDSCO NEW DRUG APPROVALS"], ["trials", "CLINICAL TRIALS (INDIA)"], ["brands", "NEW BRAND REGISTRATIONS"],
       ]} />
       {tab === "sec" && <SecTab committees={s.data.committees} />}
       {tab === "approvals" && <ApprovalsTab year={sp.get("year") ?? ""} />}
       {tab === "trials" && <TrialsTab />}
+      {tab === "brands" && <BrandsTab />}
     </div>
   );
 }
@@ -138,6 +139,44 @@ function ApprovalsTab({ year }: { year: string }) {
           ))}</tbody>
         </table>
       )}
+      <Pager meta={r.data?.meta} page={page} setPage={setPage} />
+    </Panel>
+  );
+}
+
+const SOURCE_LABEL: Record<string, string> = { cdsco_84ab: "CDSCO 84AB", cdci: "CDCI" };
+
+function BrandsTab() {
+  const [q, setQ] = useState("");
+  const [source, setSource] = useState("");
+  const [days, setDays] = useState(90);
+  const [page, setPage] = useState(1);
+  const r = useQuery({ queryKey: ["new-brands", q, source, days, page], queryFn: () => get("/pipeline/new-brands", { q, source, days, page, limit: 80 }) });
+  const since = r.data?.tracking?.find((t: Row) => t.source === "cdsco_84ab")?.since;
+  return (
+    <Panel title="New brand registrations" sub={`brands that newly appear in the CDSCO Rule 84AB registry (checked weekly${since ? `, tracked since ${day(since)}` : ""}) and in CDCI, the national drug terminology — registrations, not proof of launch; export brands appear too`}
+      right={<a href={csvUrl("/pipeline/new-brands", { q, source, days })}>CSV ⤓</a>}>
+      <div className="filterbar inline">
+        <input placeholder="brand, company or generic" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+        <select value={source} onChange={(e) => { setSource(e.target.value); setPage(1); }}>
+          <option value="">both registries</option><option value="cdsco_84ab">CDSCO 84AB</option><option value="cdci">CDCI</option>
+        </select>
+        <select value={days} onChange={(e) => { setDays(Number(e.target.value)); setPage(1); }}>
+          {[30, 90, 365, 1095].map((d) => <option key={d} value={d}>last {d} days</option>)}
+        </select>
+      </div>
+      <table className="tt">
+        <thead><tr><th>First seen</th><th>Registry</th><th>Brand</th><th>Generic / composition</th><th>Company</th><th>Group</th><th>In catalog</th></tr></thead>
+        <tbody>{r.data?.data?.map((b: Row, i: number) => (
+          <tr key={i}>
+            <td className="mut">{day(b.first_seen)}</td><td className="faint">{SOURCE_LABEL[b.source] ?? b.source}</td>
+            <td>{b.brand}</td><td className="faint" title={b.generic}>{(b.generic ?? "").slice(0, 80)}</td>
+            <td title={b.firm}>{b.company_slug ? <Link to={`/co/${b.company_slug}`}>{b.firm}</Link> : b.firm}</td>
+            <td>{b.parent_slug ? <Link to={`/g/${b.parent_slug}`}>{b.parent}</Link> : <span className="faint">—</span>}</td>
+            <td>{b.in_catalog ? <span className="badge b-mute">LISTED</span> : <span className="badge b-up">NEW</span>}</td>
+          </tr>))}</tbody>
+      </table>
+      {!r.isLoading && !r.data?.data?.length && <div className="empty">no new registrations in this window</div>}
       <Pager meta={r.data?.meta} page={page} setPage={setPage} />
     </Panel>
   );

@@ -18,6 +18,7 @@ import time
 from datetime import date, datetime
 
 from .. import db, matcher
+from . import launches
 from ..normalize import fix_mojibake, norm
 from .base import BROWSER_UA, Connector
 
@@ -220,3 +221,19 @@ class CdscoBrandRegistry(_Portal):
                           [firm, (r.get("license_number") or "").strip() or None, generic, brand, norm(brand),
                            matcher.company_for(firm)])
             self.stats.rows_new = max(0, len(seen) - before)
+        with db.writer() as w:
+            if not w.execute("SELECT 1 FROM brand_first_seen WHERE source = 'cdsco_84ab' LIMIT 1").fetchone():
+                # first run of the tracker: replay the archived snapshots (today's included) to date past arrivals
+                launches.seed_registry_from_archives(w)
+                new = db.rows(w, """SELECT brand, firm, generic, key, company_id FROM brand_first_seen
+                                    WHERE source = 'cdsco_84ab' AND NOT baseline AND first_seen >= current_date - ?""",
+                              [launches.RECENT_DAYS])
+            else:
+                items = launches.registry_items(list(seen.values()))
+                fresh = {it["key"] for it in items} - launches._known(w, "cdsco_84ab")
+                for it in items:
+                    if it["key"] in fresh:
+                        it["company_id"] = matcher.company_for(it["firm"])
+                new = launches.track(w, "cdsco_84ab", items, date.today(), baseline=False)
+            launches.announce(self, w, "CDSCO brand registry", new, date.today())
+            self.stats.notes.append(f"{len(new)} new brand names since the previous snapshot")
