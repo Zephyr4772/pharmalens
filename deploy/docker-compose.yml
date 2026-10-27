@@ -14,6 +14,7 @@ services:
     volumes:
       - ./data:/app/data
       - ./.env:/app/.env:ro
+      - /srv/backups:/srv/backups:ro     # health_watch checks the nightly backup ran
     # reachable only from the VM itself / the reverse proxy, never directly from the internet
     ports:
       - "127.0.0.1:8010:8010"
