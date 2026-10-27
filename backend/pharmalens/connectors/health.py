@@ -18,6 +18,7 @@ from ..alerts import send_telegram
 from ..config import DATA_DIR, RAW_DIR
 from .base import Connector
 
+STATE = "health2|"      # problems already announced (key -> message)
 BACKUP_MARK = Path(os.getenv("PHARMALENS_BACKUP_MARK", "/srv/backups/last_run.txt"))
 
 
@@ -79,10 +80,14 @@ class HealthWatch(Connector):
         chat = os.getenv("HEALTH_TELEGRAM_CHAT")
         found = self.problems()
         cur = db.cursor()
-        open_keys = {r[0][len("health|"):]: r[1] for r in cur.execute("SELECT key, value FROM connector_state WHERE key LIKE 'health|%'").fetchall()}
+        open_keys = {r[0][len(STATE):]: r[1] for r in cur.execute("SELECT key, value FROM connector_state WHERE starts_with(key, ?)", [STATE]).fetchall()}
         new = {k: v for k, v in found.items() if k not in open_keys}
         cleared = [k for k in open_keys if k not in found]
         self.stats.rows_seen = len(found)
+        if not chat:
+            # nothing can be announced yet: keep no state, so every open problem is sent once a chat is configured
+            self.stats.notes.append("HEALTH_TELEGRAM_CHAT not set; open: " + " | ".join(found)[:900])
+            return
         sent = 0
         if chat and (new or cleared):
             lines = [f"⚠ {v}" for v in new.values()] + [f"✅ resolved: {open_keys[k][:160]}" for k in cleared]
@@ -94,9 +99,10 @@ class HealthWatch(Connector):
                 return
         with db.writer() as w:
             for k, v in new.items():
-                w.execute("INSERT OR REPLACE INTO connector_state VALUES (?, ?)", [f"health|{k}", v])
+                w.execute("INSERT OR REPLACE INTO connector_state VALUES (?, ?)", [f"{STATE}{k}", v])
             for k in cleared:
-                w.execute("DELETE FROM connector_state WHERE key = ?", [f"health|{k}"])
+                w.execute("DELETE FROM connector_state WHERE key = ?", [f"{STATE}{k}"])
+            w.execute("DELETE FROM connector_state WHERE key LIKE 'health|%'")   # state written by the first build, never announced
         self.stats.rows_new = len(new)
         self.stats.notes.append(f"{len(found)} open problems ({len(new)} new, {len(cleared)} cleared); {sent} lines sent"
                                 + ("" if chat else "; HEALTH_TELEGRAM_CHAT not set"))
