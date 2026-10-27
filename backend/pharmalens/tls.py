@@ -8,6 +8,7 @@ it only helps build chains to roots we already trust, it is never trusted on its
 Python does not check revocation, so `revocation_status()` asks each host's OCSP responder once a week (health_watch).
 """
 import ssl
+import warnings
 from pathlib import Path
 
 import certifi
@@ -62,7 +63,9 @@ def _issuer_for(cert: x509.Certificate) -> x509.Certificate | None:
             for load in (lambda b: [x509.load_der_x509_certificate(b)], lambda b: [x509.load_pem_x509_certificate(b)],
                          pkcs7.load_der_pkcs7_certificates, pkcs7.load_pem_pkcs7_certificates):
                 try:
-                    found = [c for c in load(body) if c.subject == cert.issuer]
+                    with warnings.catch_warnings():     # eMudhra's bundle needs the (warned) BER fallback
+                        warnings.simplefilter("ignore", UserWarning)
+                        found = [c for c in load(body) if c.subject == cert.issuer]
                 except ValueError:
                     continue
                 if found:

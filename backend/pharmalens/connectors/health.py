@@ -9,6 +9,7 @@ Checked every 15 minutes inside the server; each problem is announced once when 
 A server that is down cannot report itself.
 """
 import json
+from collections import Counter
 import os
 import shutil
 import time
@@ -91,8 +92,10 @@ class HealthWatch(Connector):
         cur = db.cursor()
         cached = {k[len(TLS_STATE):]: json.loads(v) for k, v in cur.execute(
             "SELECT key, value FROM connector_state WHERE starts_with(key, ?)", [TLS_STATE]).fetchall()}
+        # a real answer holds for a week; an error (host or responder unreachable) is retried after an hour
         due = [h for h in tls.FEED_HOSTS
-               if h not in cached or datetime.now() - datetime.fromisoformat(cached[h]["checked"]) > timedelta(days=7)]
+               if h not in cached or datetime.now() - datetime.fromisoformat(cached[h]["checked"])
+               > (timedelta(hours=1) if cached[h]["status"] == "error" else timedelta(days=7))]
         if due:
             fresh = {h: tls.revocation_status(h) | {"checked": datetime.now().isoformat()} for h in due}
             with db.writer() as w:
@@ -100,7 +103,11 @@ class HealthWatch(Connector):
                     w.execute("INSERT OR REPLACE INTO connector_state VALUES (?, ?)", [f"{TLS_STATE}{h}", json.dumps(res)])
             cached |= fresh
             self.stats.notes.append(f"TLS revocation checked for {len(due)} hosts")
-        return {h: cached[h] for h in tls.FEED_HOSTS if h in cached}
+        out = {h: cached[h] for h in tls.FEED_HOSTS if h in cached}
+        tally = Counter(r["status"] for r in out.values())
+        odd = [f"{h} {r['status']}" for h, r in out.items() if r["status"] in ("revoked", "error")]
+        self.stats.notes.append("TLS: " + ", ".join(f"{n} {s}" for s, n in tally.most_common()) + (f" ({'; '.join(odd)})" if odd else ""))
+        return out
 
     def run(self):
         chat = os.getenv("HEALTH_TELEGRAM_CHAT")
