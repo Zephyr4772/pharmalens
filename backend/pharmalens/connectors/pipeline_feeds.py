@@ -16,7 +16,7 @@ import httpx
 import pdfplumber
 from selectolax.lexbor import LexborHTMLParser
 
-from .. import db, matcher
+from .. import db, matcher, tls
 from ..normalize import fix_mojibake, molecule_key, norm
 from .base import BROWSER_UA, Connector
 from .cdsco import CDSCO, cdsco_listing, parse_cdsco_date
@@ -34,7 +34,7 @@ def cdsco_file(conn: Connector, download_url: str) -> bytes | None:
     url = CDSCO + m.group(1).replace(" ", "%20")
     for attempt in range(3):
         try:
-            f = httpx.get(url, headers={"User-Agent": BROWSER_UA, "Connection": "close"}, timeout=90, verify=False)
+            f = httpx.get(url, headers={"User-Agent": BROWSER_UA, "Connection": "close"}, timeout=90, verify=tls.CONTEXT)
             if f.status_code == 200 and f.content.startswith(b"%PDF"):
                 return f.content
         except httpx.HTTPError:

@@ -4,21 +4,24 @@ Checked every 15 minutes inside the server; each problem is announced once when 
 * a feed that failed on its last two runs;
 * a feed that has not succeeded for much longer than its schedule implies;
 * the home-relay copy of a source that blocks the server is close to expiring;
-* low disk on the server, or no nightly backup in the last 30 hours.
+* low disk on the server, or no nightly backup in the last 30 hours;
+* a feed host serving a revoked TLS certificate (checked weekly over OCSP).
 A server that is down cannot report itself.
 """
+import json
 import os
 import shutil
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .. import db
+from .. import db, tls
 from ..alerts import send_telegram
 from ..config import DATA_DIR, RAW_DIR
 from .base import Connector
 
 STATE = "health2|"      # problems already announced (key -> message)
+TLS_STATE = "tlsrev|"   # weekly certificate revocation results per feed host
 BACKUP_MARK = Path(os.getenv("PHARMALENS_BACKUP_MARK", "/srv/backups/last_run.txt"))
 
 
@@ -69,12 +72,35 @@ class HealthWatch(Connector):
                 if age is None or age > cls.relay_max_age_days - 2:
                     found[f"relay-stale|{name}"] = (f"{cls.title}: the laptop relay copy is {age:.0f} days old (expires at {cls.relay_max_age_days}); "
                                                      "is the 'PharmaLens relay' task running?") if age is not None else f"{cls.title}: no relay copy uploaded yet"
+        for host, res in self.revocations().items():
+            if res["status"] == "revoked":
+                benign = res["reason"] in tls.BENIGN_REVOCATION
+                found[f"tls-revoked|{host}"] = (
+                    f"{host} serves a revoked TLS certificate ({res['reason']}, {res['detail']}). "
+                    + ("Low risk: replaced by the site, not compromised; feeds keep running with full verification."
+                       if benign else "Serious: treat data from this host with suspicion until the site fixes it."))
         du = shutil.disk_usage(DATA_DIR)
         if du.free / du.total < 0.12:
             found["disk"] = f"Server disk {du.free / 2**30:.1f} GB free of {du.total / 2**30:.0f} GB"
         if BACKUP_MARK.exists() and time.time() - BACKUP_MARK.stat().st_mtime > 30 * 3600:
             found["backup"] = f"No nightly backup since {datetime.fromtimestamp(BACKUP_MARK.stat().st_mtime):%d %b %H:%M}"
         return found
+
+    def revocations(self) -> dict[str, dict]:
+        """Revocation status of every feed host's certificate, refreshed weekly (OCSP is slow; certificates are not)."""
+        cur = db.cursor()
+        cached = {k[len(TLS_STATE):]: json.loads(v) for k, v in cur.execute(
+            "SELECT key, value FROM connector_state WHERE starts_with(key, ?)", [TLS_STATE]).fetchall()}
+        due = [h for h in tls.FEED_HOSTS
+               if h not in cached or datetime.now() - datetime.fromisoformat(cached[h]["checked"]) > timedelta(days=7)]
+        if due:
+            fresh = {h: tls.revocation_status(h) | {"checked": datetime.now().isoformat()} for h in due}
+            with db.writer() as w:
+                for h, res in fresh.items():
+                    w.execute("INSERT OR REPLACE INTO connector_state VALUES (?, ?)", [f"{TLS_STATE}{h}", json.dumps(res)])
+            cached |= fresh
+            self.stats.notes.append(f"TLS revocation checked for {len(due)} hosts")
+        return {h: cached[h] for h in tls.FEED_HOSTS if h in cached}
 
     def run(self):
         chat = os.getenv("HEALTH_TELEGRAM_CHAT")

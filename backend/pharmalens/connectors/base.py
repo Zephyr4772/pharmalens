@@ -13,7 +13,7 @@ from datetime import date, datetime
 
 import httpx
 
-from .. import db
+from .. import db, tls
 from ..config import HTTP_TIMEOUT, RAW_DIR
 
 BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36"
@@ -44,7 +44,7 @@ class Connector:
     def http(self) -> httpx.Client:
         if self._http is None:
             self._http = httpx.Client(
-                timeout=HTTP_TIMEOUT, follow_redirects=True, verify=False,
+                timeout=HTTP_TIMEOUT, follow_redirects=True, verify=tls.CONTEXT,
                 headers={"User-Agent": BROWSER_UA, "Accept-Language": "en-IN,en;q=0.9"},
             )
         return self._http

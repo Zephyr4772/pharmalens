@@ -16,6 +16,8 @@ from cryptography.hazmat.primitives import padding, serialization
 from cryptography.hazmat.primitives.asymmetric import padding as rsa_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from .. import tls
+
 HOST = "https://nppaipdms.gov.in"
 PAGE = (HOST + "/HISUtilities/dashboard/dashBoardACTION.cnt?groupId=ODM=&dashboardFor=TlBQQQ=="
         "&hospitalCode=998&seatId=10001&isGlobal=1&isPreview=0")
@@ -50,7 +52,7 @@ class NppaDashboard:
         # the CSRF endpoint answers "Session Expired" unless the request looks same-origin
         self.c = httpx.Client(headers={"User-Agent": UA, "X-Requested-With": "XMLHttpRequest", "Origin": HOST,
                                        "Referer": HOST + "/HISUtilities/dashboard/dashBoardACTION.cnt"},
-                              timeout=90, verify=False, follow_redirects=True)
+                              timeout=90, verify=tls.CONTEXT, follow_redirects=True)
         page = self.c.get(PAGE).text
         m = re.search(r"""name=['"]tid['"][^>]*value=['"]([^'"]+)""", page)
         self.tid = m.group(1) if m else ""
