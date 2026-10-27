@@ -89,6 +89,12 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
    in `mfr_prices` (with PTR/PTS/GST), updates `products` MRP/pack/unit price when newer (`mrp_asof = 'mfr YYYY-MM-DD'`),
    adds `price_observations`, refreshes combo price stats (`derived.refresh_combo_prices`, shared with build_core),
    and build_core re-applies them on rebuild. Product pages show the manufacturer list entry with trade margins.
+   Server backfill 2026-10-28: 182 lists, 51 manufacturers, 18,024 rows, 8,028 matched; ~5,850 catalog MRPs now
+   from manufacturers (1,434 previously blank). Check: new/old MRP median ratio 1.00 (p5–p95 0.88–1.10).
+   Open: Ajanta's list is a scanned image (needs OCR); Sanofi's PDF has no rows; ~15 small labels resolve to no
+   company (Emcutix, Stedman, La Pristine, Modi Mundi, Gennova…) — add to parents/companies seeds to match them.
+   Git: Windows credential manager lost the GitHub login; push with
+   `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push` (gh is signed in).
 5. Then: retire `drugsetu_harvest` / `drugsetu_launches` and the product page's DrugSetu live lookup.
 
 ## Next candidates
