@@ -13,6 +13,9 @@ COPY backend/requirements.txt backend/requirements.txt
 RUN pip install -r backend/requirements.txt
 COPY backend/ backend/
 COPY web/dist/ web/dist/
+# project docs: the operator bot reads them to answer questions about scope, sources and decisions
+COPY docs/ docs/
+COPY README.md HANDOFF.md ./
 
 EXPOSE 8010
 CMD ["python", "-W", "ignore", "-m", "uvicorn", "pharmalens.api.main:app", "--host", "0.0.0.0", "--port", "8010", "--app-dir", "backend"]

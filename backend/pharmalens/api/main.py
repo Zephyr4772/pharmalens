@@ -28,6 +28,8 @@ async def lifespan(app: FastAPI):
     migrate()
     if os.getenv("PHARMALENS_SCHEDULER", "1") != "0":
         scheduler.start()
+        from ..bot.telegram import start as start_bot
+        start_bot()          # DrugDen operator bot (Telegram), only with the scheduler: one poller per bot token
     yield
     scheduler.shutdown()
     db.close()
