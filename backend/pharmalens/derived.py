@@ -38,6 +38,26 @@ OWNER_SQL = """
 """
 
 
+def refresh_combo_prices(cur):
+    """Brand counts and MRP / per-unit spreads per combination (catalog build, and after a price feed updates MRPs)."""
+    cur.execute("""
+        UPDATE combos SET
+          product_count = s.pc, company_count = s.cc, min_mrp = s.mn, median_mrp = s.md, max_mrp = s.mx,
+          therapeutic_class = s.tc
+        FROM (SELECT combo_id, count(*) pc, count(DISTINCT company_id) cc,
+                     min(mrp) mn, median(mrp) md, max(mrp) mx, mode(therapeutic_class) tc
+              FROM products WHERE combo_id IS NOT NULL GROUP BY 1) s
+        WHERE combos.id = s.combo_id""")
+    cur.execute("""
+        UPDATE combos SET min_unit = s.mn, median_unit = s.md, max_unit = s.mx
+        FROM (SELECT p.combo_id, min(p.unit_price) mn, median(p.unit_price) md, max(p.unit_price) mx
+              FROM products p
+              JOIN (SELECT combo_id, median(unit_price) med FROM products WHERE unit_price > 0 GROUP BY 1) m USING (combo_id)
+              WHERE p.unit_price >= 0.15 * m.med AND p.unit_price <= 20 * m.med
+              GROUP BY 1) s
+        WHERE combos.id = s.combo_id""")
+
+
 def refresh_market_share(cur):
     t0 = time.time()
     cur.execute("DROP TABLE IF EXISTS segment_share")

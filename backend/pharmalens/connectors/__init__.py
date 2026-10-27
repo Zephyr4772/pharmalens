@@ -12,13 +12,14 @@ from .global_reg import OpenFdaIndiaRecalls
 from .international import EmaMedicines, NseFilings, OpenFdaBulk, WhoPrequal
 from .gov_india import JanAushadhi, NppaOrders
 from .nppa_prices import NppaRetailPrices
+from .mfr_prices import MfrPriceLists
 from .markets import NseFundamentals, NseHistory, NseQuotes
 from .news import NewsArchive, PharmaNews
 from .pipeline_feeds import CdscoApprovals, CdscoSec, ClinicalTrialsIndia, Nlem, NppaCompendium
 
 REGISTRY = {c.name: c for c in [
     CdscoNsq, NsqMirror, CdscoBannedFdc, CdscoGazette, CdscoAlerts,
-    NppaOrders, NppaRetailPrices, JanAushadhi,
+    NppaOrders, NppaRetailPrices, MfrPriceLists, JanAushadhi,
     NseQuotes, NseFundamentals, NseHistory,
     PharmaNews, NewsArchive, OpenFdaIndiaRecalls, DrugSetuLaunches, DrugSetuHarvest,
     CdscoApprovals, CdscoSec, Nlem, ClinicalTrialsIndia, NppaCompendium,

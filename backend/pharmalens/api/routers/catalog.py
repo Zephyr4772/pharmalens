@@ -245,6 +245,12 @@ def product(pid: int):
                 info[k] = json.loads(info[k])
     p["label"] = info
     p["price_history"] = db.rows(cur, "SELECT observed_on, mrp, source FROM price_observations WHERE product_id = ? ORDER BY observed_on", [pid])
+    # the manufacturer's own price list entry (Form V): MRP with trade prices, newest first
+    p["mfr_price"] = (maybe(cur, """
+        SELECT effective_on, company_label, product AS list_name, pack, mrp, mrp_old, ptr, pts, gst, match_kind, pack_mrp,
+               doc_url, doc_host
+        FROM mfr_prices WHERE product_id = ? ORDER BY effective_on DESC NULLS LAST, match_kind = 'same_pack' DESC LIMIT 1""",
+        [pid]) or [None])[0]
     # official launch prices NPPA fixed for the same molecules; this product's own marketer or group first
     p["nppa_notified"] = maybe(cur, """
         SELECT n.notified_on, n.so_number, n.kind, n.formulation, n.strength, n.unit, n.price, n.marketer, n.doc_url,

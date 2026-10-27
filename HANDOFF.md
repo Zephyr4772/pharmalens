@@ -81,6 +81,14 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
    incl. ~35 complete "New GST" lists from Sept 2025 (Cipla, Lupin, Sun, Torrent, Abbott, Zydus, Macleods, Leeford,
    Ajanta, Eris, Menarini, Sanofi, Natco…) and monthly lists (USV, Emcure, Ipca, Zuventus, Gennova). These are
    manufacturers' documents, but on an e-pharmacy domain: **owner decision pending** before using them.
+   **Decided + built 2026-10-27:** owner approved the Netmeds-hosted manufacturer PDFs (company sites first; never the
+   e-pharmacy's own product catalogue). `mfr_price_lists` feed (connectors/mfr_prices.py) parses every layout seen
+   (statutory Form V; GST-revision sheets of Lupin, Sun, Macleods, Abbott, Zydus, Leeford, Torrent…) by header
+   words, matches strictly (same group, brand+strength key, same dosage-form group, same or cleanly divisible pack,
+   new price within 0.6–1.6x of ours / of the list's own pre-revision price, ambiguous = skipped), stores every row
+   in `mfr_prices` (with PTR/PTS/GST), updates `products` MRP/pack/unit price when newer (`mrp_asof = 'mfr YYYY-MM-DD'`),
+   adds `price_observations`, refreshes combo price stats (`derived.refresh_combo_prices`, shared with build_core),
+   and build_core re-applies them on rebuild. Product pages show the manufacturer list entry with trade margins.
 5. Then: retire `drugsetu_harvest` / `drugsetu_launches` and the product page's DrugSetu live lookup.
 
 ## Next candidates

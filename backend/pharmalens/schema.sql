@@ -207,6 +207,33 @@ CREATE TABLE IF NOT EXISTS brand_first_seen (   -- when a brand first appeared i
     PRIMARY KEY (source, key)
 );
 
+CREATE TABLE IF NOT EXISTS mfr_prices (   -- manufacturers' statutory price lists (DPCO Form V / GST revision lists)
+    key           VARCHAR PRIMARY KEY,  -- doc url | row number
+    doc_url       VARCHAR,
+    doc_title     VARCHAR,
+    doc_host      VARCHAR,              -- company site or the e-pharmacy index that hosts the manufacturer's PDF
+    company_label VARCHAR,              -- manufacturer as named on the document
+    parent_id     INTEGER,              -- its corporate group (match scope)
+    company_id    INTEGER,
+    effective_on  DATE,
+    code          VARCHAR,              -- manufacturer's SKU code, when listed
+    product       VARCHAR,
+    composition   VARCHAR,
+    pack          VARCHAR,
+    pack_qty      DOUBLE,
+    gst           DOUBLE,
+    ptr           DOUBLE,               -- price to retailer, excluding tax
+    pts           DOUBLE,               -- price to stockist / distributor, excluding tax
+    mrp_old       DOUBLE,
+    mrp           DOUBLE,               -- maximum retail price incl. taxes, for the listed pack
+    status        VARCHAR,              -- e.g. 'De-Cont' when the list marks it
+    product_id    INTEGER,              -- matched catalog product
+    match_name    VARCHAR,              -- its name_norm (rebuilds re-apply by name)
+    match_kind    VARCHAR,              -- same_pack | scaled | name_only
+    pack_mrp      DOUBLE,               -- MRP for the catalog product's pack
+    fetched_at    TIMESTAMP
+);
+
 CREATE SEQUENCE IF NOT EXISTS seq_docs START 1;
 CREATE TABLE IF NOT EXISTS reg_documents (   -- regulator notices/circulars/gazette/price orders
     id           BIGINT DEFAULT nextval('seq_docs') PRIMARY KEY,

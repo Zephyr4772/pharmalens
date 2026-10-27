@@ -22,6 +22,7 @@ from datetime import date, datetime, timezone
 
 import duckdb
 
+from ..derived import refresh_combo_prices
 from ..molecule_repair import MoleculeRepair
 from ..config import duckdb_settings
 from ..config import DB_PATH, LEGACY_DIR, MASTER_DIR, ONEMG_2025_CSV, SCHEMA_VERSION, SEED_DIR
@@ -355,6 +356,25 @@ def build():
                 ds_added += 1
         log(f"drugsetu: refreshed {ds_matched:,} products, added {ds_added:,} new")
 
+    # ---- manufacturers' own price lists (Form V), matched by the mfr_price_lists feed: newer MRPs win
+    has_mfr = con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'mfr_prices'").fetchone()[0]
+    if has_mfr:
+        from ..connectors.mfr_prices import asof_date, best_rows
+        mfr_applied = 0
+        for _, (_, nn, eff, pack_mrp, kind, pack, qty, _) in best_rows(con).items():
+            pid = by_norm.get(nn)
+            if not pid:
+                continue
+            p = products[pid - 1]
+            have = asof_date(p["mrp_asof"])
+            if have and have > eff:
+                continue
+            p["mrp"], p["mrp_asof"] = pack_mrp, f"mfr {eff:%Y-%m-%d}"
+            if kind == "name_only" and not p["pack_size"] and qty:
+                p["pack_size"] = f"pack of {qty:g} ({pack})" if pack else f"pack of {qty:g}"
+            mfr_applied += 1
+        log(f"manufacturer price lists: {mfr_applied:,} MRPs applied")
+
     # dosage form fallback from name
     FORMS = ["tablet", "capsule", "syrup", "suspension", "injection", "cream", "gel", "ointment", "drop",
              "lotion", "powder", "solution", "inhaler", "respules", "spray", "soap", "shampoo", "sachet",
@@ -626,22 +646,7 @@ def build():
         UPDATE molecules SET nppa_ceiling = s.cp
         FROM (SELECT molecule_id, min(ceiling_price) cp FROM nppa_ceiling WHERE molecule_id IS NOT NULL GROUP BY 1) s
         WHERE molecules.id = s.molecule_id""")
-    con.execute("""
-        UPDATE combos SET
-          product_count = s.pc, company_count = s.cc, min_mrp = s.mn, median_mrp = s.md, max_mrp = s.mx,
-          therapeutic_class = s.tc
-        FROM (SELECT combo_id, count(*) pc, count(DISTINCT company_id) cc,
-                     min(mrp) mn, median(mrp) md, max(mrp) mx, mode(therapeutic_class) tc
-              FROM products WHERE combo_id IS NOT NULL GROUP BY 1) s
-        WHERE combos.id = s.combo_id""")
-    con.execute("""
-        UPDATE combos SET min_unit = s.mn, median_unit = s.md, max_unit = s.mx
-        FROM (SELECT p.combo_id, min(p.unit_price) mn, median(p.unit_price) md, max(p.unit_price) mx
-              FROM products p
-              JOIN (SELECT combo_id, median(unit_price) med FROM products WHERE unit_price > 0 GROUP BY 1) m USING (combo_id)
-              WHERE p.unit_price >= 0.15 * m.med AND p.unit_price <= 20 * m.med
-              GROUP BY 1) s
-        WHERE combos.id = s.combo_id""")
+    refresh_combo_prices(con)
     con.execute("""
         UPDATE companies SET
           product_count = s.pc, active_count = s.ac, molecule_count = s.mc, median_mrp = s.md, top_class = s.tc

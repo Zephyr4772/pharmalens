@@ -70,7 +70,10 @@ Data notes:
 - nppa_retail_prices: official launch price per unit (excl. GST) NPPA fixed for new drugs since 2019, with
   formulation, strength, unit, manufacturer, marketer, company_id, molecule_ids (sorted), notified_on, so_number.
 - brand_first_seen: when each brand first appeared in the CDSCO 84AB registry (source 'cdsco_84ab') or CDCI;
-  baseline = already there when tracking began (not new). New registrations, not proof of launch."""
+  baseline = already there when tracking began (not new). New registrations, not proof of launch.
+- mfr_prices: rows of manufacturers' own price lists (Form V / GST revision): company_label, product, pack, mrp,
+  mrp_old, ptr, pts, gst, effective_on, product_id (matched catalog SKU or NULL), match_kind. products.mrp_asof
+  'mfr YYYY-MM-DD' means the catalog MRP came from such a list."""
 
 
 def chunks(text: str, size: int = 3800) -> list[str]:

@@ -17,6 +17,30 @@ function sharedNote(shared: Row | null | undefined) {
   return ` · shared from ${shared.name}, ${shared.same_strength ? "same composition" : shared.same_strength === false ? "same molecules, different strength" : "same molecules"}`;
 }
 
+// 'mfr 2025-09-22' -> 'manufacturer price list, 22 Sept 2025'; other vintages ('2025', 'drugsetu …') as stored
+function asofLabel(a: string | null | undefined) {
+  if (!a) return "—";
+  const m = a.match(/^mfr (\d{4}-\d{2}-\d{2})$/);
+  return m ? `manufacturer price list, ${day(m[1])}` : a;
+}
+
+function MfrPrice({ m }: { m: Row }) {
+  const margin = m.ptr && m.mrp && m.gst != null ? (1 - m.ptr * (1 + m.gst / 100) / m.mrp) * 100 : null;
+  return (
+    <Panel title="Manufacturer price list" sub={`${m.company_label} · Form V, effective ${day(m.effective_on)}${m.match_kind === "scaled" ? " · listed for a different pack size, scaled" : ""}`}
+      right={m.doc_url && <a href={m.doc_url} target="_blank" rel="noreferrer">document ›</a>}>
+      <div className="kv">
+        <div><span>Listed as</span>{m.list_name} {m.pack && <span className="faint">({m.pack})</span>}</div>
+        <div><span>MRP</span><b className="amb">{inr(m.mrp)}</b>{m.mrp_old ? <span className="faint"> (was {inr(m.mrp_old)})</span> : null}</div>
+        {m.ptr != null && <div><span>Price to retailer</span>{inr(m.ptr)} <span className="faint">excl. tax</span></div>}
+        {m.pts != null && <div><span>Price to stockist</span>{inr(m.pts)} <span className="faint">excl. tax</span></div>}
+        {m.gst != null && <div><span>GST</span>{m.gst}%</div>}
+        {margin != null && <div><span>Retail margin</span>{margin.toFixed(1)}% of MRP</div>}
+      </div>
+    </Panel>
+  );
+}
+
 function SafetyGrid({ safety, shared }: { safety: Record<string, Row>; shared?: Row | null }) {
   const keys = SAFETY_ORDER.filter((k) => safety[k]);
   return (
@@ -123,7 +147,7 @@ export default function ProductDetail() {
         <span className="detail-title">{d.name}</span>
         <span className="price-big">{inr(d.mrp)}</span>
         <span className="muted">{d.pack_size}</span>
-        <span className="faint">MRP as of {d.mrp_asof ?? "—"}</span>
+        <span className="faint">MRP as of {asofLabel(d.mrp_asof)}</span>
         {d.ban_level === "exact" && <span className="badge b-down">PROHIBITED FDC</span>}
         {d.ban_level === "review" && <span className="badge b-warn">CHECK AGAINST BAN</span>}
         {d.is_discontinued && <span className="badge b-mute">DISCONTINUED</span>}
@@ -167,6 +191,7 @@ export default function ProductDetail() {
           ) : <div className="empty">none recorded</div>}
         </Panel>
         <div className="stack">
+          {d.mfr_price && <MfrPrice m={d.mfr_price} />}
           <Panel title="Price record">
             <table className="tt"><tbody>{d.price_history.map((h: Row, i: number) => <tr key={i}><td>{day(h.observed_on)}</td><td className="num amb">{inr(h.mrp)}</td><td className="mut">{h.source}</td></tr>)}</tbody></table>
             {d.nppa_ceiling.length > 0 && <>
