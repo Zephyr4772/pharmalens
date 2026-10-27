@@ -212,6 +212,34 @@ def product(pid: int):
         [p["combo_id"], pid, p["dosage_form"], p["combo_id"], p["dosage_form"]]) if p["combo_id"] else []
     info = db.one(cur, "SELECT * FROM product_info WHERE product_id = ?", [pid])
     if info:
+        info["shared_from"] = None
+    elif p["combo_id"]:
+        # label advice describes the composition, so another brand of the same molecules carries it: prefer the
+        # same strengths, then the same dosage form, then the fullest text; its brand name becomes this product's
+        # strengths per molecule, e.g. "390:100mg|418:600mg"; unknown when any strength is missing
+        sig = "|".join(f"{m['id']}:{(m['strength'] or '').lower().replace(' ', '')}"
+                       for m in sorted(p["molecules"], key=lambda m: m["id"]))
+        sig = sig if p["molecules"] and all(m["strength"] for m in p["molecules"]) else None
+        info = db.one(cur, """
+            WITH cand AS (
+              SELECT i.*, q.id AS donor_id, q.name AS donor_name, q.dosage_form AS donor_form,
+                     (SELECT string_agg(molecule_id || ':' || lower(replace(coalesce(strength, ''), ' ', '')), '|' ORDER BY molecule_id)
+                      FROM product_molecules WHERE product_id = q.id) AS donor_sig
+              FROM product_info i JOIN products q ON q.id = i.product_id JOIN combos k ON k.id = q.combo_id
+              WHERE k.mkey = (SELECT mkey FROM combos WHERE id = ?) AND q.id <> ?)
+            SELECT * FROM cand
+            ORDER BY (donor_sig = ?) DESC NULLS LAST, (donor_form IS NOT DISTINCT FROM ?) DESC,
+                     (safety IS NOT NULL) DESC, length(coalesce(introduction, '')) DESC, donor_id
+            LIMIT 1""", [p["combo_id"], pid, sig, p["dosage_form"]])
+        if info:
+            donor = info.pop("donor_name")
+            info.pop("donor_form")
+            info["shared_from"] = {"id": info.pop("donor_id"), "name": donor,
+                                   "same_strength": (info.pop("donor_sig") == sig) if sig else None}
+            for k, v in info.items():
+                if isinstance(v, str) and donor:
+                    info[k] = v.replace(donor, p["name"])
+    if info:
         for k in ("benefits", "quick_tips", "side_effects", "safety"):
             if isinstance(info.get(k), str):
                 info[k] = json.loads(info[k])

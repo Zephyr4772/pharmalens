@@ -11,10 +11,16 @@ const LEVEL_UI: Record<string, [string, string]> = {
   safe_if_prescribed: ["b-up", "SAFE IF PRESCRIBED"], safe: ["b-up", "SAFE"], not_applicable: ["b-mute", "N/A"], info: ["b-mute", "SEE NOTE"],
 };
 
-function SafetyGrid({ safety }: { safety: Record<string, Row> }) {
+// label text borrowed from another brand of the same composition (this product has none of its own)
+function sharedNote(shared: Row | null | undefined) {
+  if (!shared) return "";
+  return ` · shared from ${shared.name}, ${shared.same_strength ? "same composition" : shared.same_strength === false ? "same molecules, different strength" : "same molecules"}`;
+}
+
+function SafetyGrid({ safety, shared }: { safety: Record<string, Row>; shared?: Row | null }) {
   const keys = SAFETY_ORDER.filter((k) => safety[k]);
   return (
-    <Panel title="Safety profile" sub="label advice, graded · reference for prescribers and pharmacists">
+    <Panel title="Safety profile" sub={`label advice, graded · reference for prescribers and pharmacists${sharedNote(shared)}`}>
       <div className="safety-grid">
         {keys.map((k) => {
           const [cls, txt] = LEVEL_UI[safety[k].level] ?? LEVEL_UI.info;
@@ -33,7 +39,7 @@ function SafetyGrid({ safety }: { safety: Record<string, Row> }) {
 function LabelPanel({ d }: { d: Row }) {
   const l = d.label ?? {};
   return (
-    <Panel title="Label information" sub="product monograph text as published by Indian e-pharmacies (1mg-derived)">
+    <Panel title="Label information" sub={`product monograph text as published by Indian e-pharmacies (1mg-derived)${sharedNote(l.shared_from)}`}>
       <div className="grid cols-2">
         <div>
           {l.introduction && <p className="prose">{l.introduction}</p>}
@@ -173,7 +179,7 @@ export default function ProductDetail() {
           </Panel>
         </div>
       </div>
-      {d.label?.safety && <SafetyGrid safety={d.label.safety} />}
+      {d.label?.safety && <SafetyGrid safety={d.label.safety} shared={d.label.shared_from} />}
       {(d.label || d.uses || d.side_effects) && <LabelPanel d={d} />}
       {!d.label && <MoleculeReference r={d.molecule_reference} />}
       <LivePanel id={d.id} catalogUnit={d.unit_price} />

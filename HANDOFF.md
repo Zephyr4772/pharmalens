@@ -46,6 +46,24 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
 - **Tools:** `deploy/deploy.sh` (code), `deploy/rebuild.sh` (catalog rebuild cycle against the server database; server stopped meanwhile; old database kept as `.pre-rebuild`), `deploy/relay.ps1` (home relay + weekly backup pull to `D:\pharmacopyackups`). SSH via Tailscale: `ssh -i ~/.ssh/azure_srv azureuser@srv1`.
 - **Waiting on the user:** enable the relay task (one PowerShell command, see the final report); a Telegram bot token for failure alerts.
 
+## DrugSetu replacement (agreed 2026-10-27, both items required)
+DrugSetu's 7-day trial is over and a new account would also cap out (~500 queries), so it is a dead end. **Keep its
+feeds and saved data (`drugsetu_products`, `data/sources/drugsetu/`, 456 products, 201 catalog prices) until our own
+sources match it; only then retire it.** It was never the backbone: catalog prices come from the Kaggle master
+(2022-24) and the 1mg 2025 snapshot; 143k active SKUs have no MRP. What DrugSetu gave per product, and our own route:
+1. **Label & safety text** (uses, side effects, how it works, alcohol/pregnancy/breastfeeding/driving/kidney/liver)
+   — share `product_info` across products with the same composition (same combo, prefer same strength and form),
+   labelled as shared. **Done 2026-10-27:** product pages borrow the best donor (same per-molecule strengths, then
+   same form) at read time; 150,520 → 455,283 active products (85%). Next: item 2.
+2. **Official launch prices** — parse NPPA retail-price notifications / draft price calculation sheets
+   (`reg_documents.doc_type = 'draft_price_sheet'`, 88 PDFs, newest 2026-10-19) into per-pack prices with company,
+   formulation and date; add them to `price_observations` and the catalog.
+3. **New-launch detection** — weekly diff of the CDSCO brand registry (Rule 84AB, 90k brands, licence + generic name)
+   and CDCI brands (93k, `last_updated_on`) to emit launch events; replaces DrugSetu's newest-first listing.
+4. **Price freshness beyond NPPA** — candidates to verify: GeM (Government e-Marketplace) listings, NPPA IPDMS
+   Form V price lists, manufacturers' published MRP lists. No e-pharmacy scraping.
+5. Then: retire `drugsetu_harvest` / `drugsetu_launches` and the product page's DrugSetu live lookup.
+
 ## Next candidates
 0. Register at nrces.in for official CDCI files (`CDCI_BASE_URL`). Review leftover one-product junk molecules (e.g. brand glued to a molecule: 'Vensat Bioamoxycillin').
 1. CTRI direct (search is CAPTCHA-protected; currently via ClinicalTrials.gov cross-registration). SEC rows from committees with non-standard tables (~107 'other').
