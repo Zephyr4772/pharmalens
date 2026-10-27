@@ -2,7 +2,9 @@
 # Build context is the repo root; the web UI must be built first (npm --prefix web run build).
 FROM python:3.12-slim
 
-ENV PYTHONUNBUFFERED=1 PYTHONIOENCODING=utf-8 PIP_NO_CACHE_DIR=1 \
+# timestamps in the database are naive local time (IST), as on the original laptop install
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
+ENV TZ=Asia/Kolkata PYTHONUNBUFFERED=1 PYTHONIOENCODING=utf-8 PIP_NO_CACHE_DIR=1 \
     PHARMALENS_DB=/app/data/pharmalens.duckdb \
     PHARMALENS_DUCKDB_TEMP=/app/data/duckdb_tmp
 
