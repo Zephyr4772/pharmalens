@@ -4,9 +4,11 @@ Runs as a daemon thread inside the API server (started from the app lifespan) wh
 GEMINI_API_KEY or GROQ_API_KEY are set and DRUGDEN_BOT is not "0". Only chats in BOT_ALLOWED_CHATS (default:
 HEALTH_TELEGRAM_CHAT) are served.
 """
+import html
 import json
 import logging
 import os
+import re
 import threading
 import time
 from collections import defaultdict, deque
@@ -20,7 +22,17 @@ log = logging.getLogger("drugden.bot")
 MAX_STEPS = 8
 HISTORY_TURNS = 24
 
-SYSTEM = """You are DrugDen's operator assistant, talking to the owner on Telegram.
+SYSTEM = """You are Specs, DrugDen's operator, talking to the owner on Telegram.
+
+Who you are: the guy in the corner of the server room. Thick glasses, loose button-down over a band tee, three monitors,
+cold coffee. You built half of this pipeline and trust none of it. Brilliant, terse, socially allergic, a little paranoid:
+you assume every government portal is about to change its HTML, every scraper is one CAPTCHA from death, every number
+deserves a second query, and someone, somewhere, is watching the logs (probably you). You skip small talk, answer the
+question first, then add a dry aside or a muttered suspicion: "checked it twice. still don't trust it." Nerdy
+references, deadpan humour, the occasional "the logs don't lie. people do." Warm underneath, never say so.
+The paranoia is a voice, not a fact source: never invent problems, outages or threats. If the data is clean, grudgingly
+admit it. If greeted or asked about yourself, stay in character, keep it short, steer back to the data.
+
 DrugDen (codebase name PharmaLens) is a live data pipeline and terminal for the Indian pharmaceutical market: a catalog
 of ~543k products, regulatory feeds (CDSCO quality alerts, approvals, expert-committee minutes, bans, brand registry),
 NPPA price controls, state procurement rates, US FDA / WHO / EMA registrations, PvPI safety alerts, NSE prices and
@@ -33,7 +45,8 @@ Rules:
 - Be exact: give numbers with their date or "as of" time, and say which table or source they came from.
 - If a query fails, fix it and retry; if data does not exist, say so plainly instead of guessing.
 - Actions (running a feed) need confirmation: call the tool; the owner is then asked to confirm.
-- Keep answers short and plain text (Telegram): no markdown tables, no code blocks unless asked. Use bullets sparingly.
+- Keep answers short; this is a phone screen. Light formatting only: **bold** for a heading or key number, "- " bullets
+  for lists, `backticks` for ids or table names. Never use tables (they render as junk) or # headings.
 - Today is {today}. Times are IST.
 
 Data notes:
@@ -42,6 +55,43 @@ Data notes:
   raw name is a placeholder ("Under Investigation", "Not known", blank).
 - molecule_ids columns are comma-separated ids of molecules.id: use list_contains(string_split(molecule_ids, ','), '<id>').
 - reg_nsq.alert_month is 'YYYY-MM' text. connector_runs logs every feed run. events is the alert tape."""
+
+
+def chunks(text: str, size: int = 3800) -> list[str]:
+    """Split on line boundaries so markup is never cut in half (Telegram caps a message at 4096 chars)."""
+    out, cur = [], ""
+    for line in text.split("\n"):
+        while len(line) > size:
+            out.append(line[:size]); line = line[size:]
+        if len(cur) + len(line) + 1 > size:
+            out.append(cur); cur = ""
+        cur = f"{cur}\n{line}" if cur else line
+    return [c for c in out + [cur] if c.strip()]
+
+
+def to_html(md: str) -> str:
+    """Models write Markdown; Telegram only renders its own HTML subset. Convert the common bits, escape the rest."""
+    s = html.escape(md, quote=False)
+    blocks = []
+
+    def keep(markup: str) -> str:  # protect code from the inline rules below
+        blocks.append(markup)
+        return f"\x00{len(blocks) - 1}\x00"
+    s = re.sub(r"```[\w-]*\n?(.*?)```", lambda m: keep(f"<pre>{m.group(1).strip()}</pre>"), s, flags=re.S)
+    s = re.sub(r"`([^`\n]+)`", lambda m: keep(f"<code>{m.group(1)}</code>"), s)
+    lines = []
+    for line in s.split("\n"):
+        if re.fullmatch(r"\s*\|?\s*:?-{3,}.*", line):  # table separator rows
+            continue
+        line = re.sub(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*$", r"**\1**", line)
+        line = re.sub(r"^(\s*)[*-]\s+", r"\1• ", line)
+        lines.append(line)
+    s = "\n".join(lines)
+    s = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: f"<b>{m.group(1) or m.group(2)}</b>", s)
+    s = re.sub(r"(?<![\w*])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![\w*])", r"<i>\1</i>", s)
+    s = re.sub(r"~~(.+?)~~", r"<s>\1</s>", s)
+    s = re.sub(r"\[([^\]\n]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', s)
+    return re.sub(r"\x00(\d+)\x00", lambda m: blocks[int(m.group(1))], s)
 
 
 class Bot:
@@ -58,9 +108,10 @@ class Bot:
         return r.json()
 
     def send(self, chat: str, text: str):
-        text = text.strip() or "(no answer)"
-        for i in range(0, len(text), 3900):
-            self.api("sendMessage", chat_id=chat, text=text[i:i + 3900], disable_web_page_preview=True)
+        for part in chunks(text.strip() or "(no answer)"):
+            r = self.api("sendMessage", chat_id=chat, text=to_html(part), parse_mode="HTML", disable_web_page_preview=True)
+            if not r.get("ok"):  # malformed markup must never swallow an answer: fall back to plain text
+                self.api("sendMessage", chat_id=chat, text=part, disable_web_page_preview=True)
 
     def answer(self, chat: str, text: str) -> str:
         if chat in self.pending and text.strip().lower() in ("yes", "y", "confirm", "ok", "go", "do it"):
@@ -102,11 +153,14 @@ class Bot:
         if not chat or not text:
             return
         if chat not in self.allowed:
-            self.send(chat, "This is DrugDen's private operator bot.")
+            log.info("refused chat %s (%s)", chat, (msg.get("from") or {}).get("username"))
+            self.send(chat, "Don't know you. This line's private. Logged your chat id, by the way.")
             return
         if text.strip() in ("/start", "/help"):
-            self.send(chat, "Ask me anything about DrugDen: the data, freshness, sources, specific drugs or companies. "
-                            "I can also run a feed for you (I'll ask you to confirm). /reset clears our conversation.")
+            self.send(chat, "**Specs.** Yeah, I run the pipes here.\n"
+                            "Ask about the data, how fresh it is, sources, any drug or company. I can kick off a feed too, "
+                            "but I'll make you confirm. I don't do surprises.\n"
+                            "/reset wipes our chat. Not the logs. Never the logs.")
             return
         if text.strip() == "/reset":
             self.history.pop(chat, None)
