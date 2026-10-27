@@ -289,8 +289,9 @@ class CdscoSec(Connector):
                             recs[-1]["rec"].append(cells[3])
         out = []
         for r in recs:
-            file_no, drug, division = split_file_no(re.sub(r"\s+", " ", r["drug"]).strip(), r["division"])
-            out.append({"file_no": file_no, "drug": fix_mojibake(drug) or text, "firm": fix_mojibake(re.sub(r"\s+", " ", r["firm"]).strip()),
+            raw_drug = re.sub(r"\s+", " ", r["drug"]).strip()
+            file_no, drug, division = split_file_no(raw_drug, r["division"])
+            out.append({"file_no": file_no, "drug": fix_mojibake(drug) or raw_drug, "firm": fix_mojibake(re.sub(r"\s+", " ", r["firm"]).strip()),
                         "rec": fix_mojibake(re.sub(r"\s+", " ", " ".join(r["rec"])).strip()), "division": division or "other"})
         return out
 
