@@ -1,10 +1,11 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { crore, day, get, num, signed, type Row } from "../lib/api";
 import { Dossier } from "../components/Dossier";
-import { ErrorBox, Kpi, LineChart, Loading, Panel, Star } from "../components/ui";
+import { ErrorBox, Kpi, LineChart, Loading, Panel, Star, Tabs } from "../components/ui";
 import { Outcome } from "./Pipeline";
-import { Filings, Licences, Tenders, UsPortfolio } from "../components/Depth";
+import { Debarments, Filings, Licences, Tenders, UsPortfolio } from "../components/Depth";
 
 export default function GroupDetail() {
   const { slug } = useParams();
@@ -34,9 +35,7 @@ export default function GroupDetail() {
         <Kpi label="US FDA applications" value={num(d.us_portfolio?.applications)} sub={d.us_portfolio?.andas ? `${num(d.us_portfolio.andas)} ANDA` : undefined} />
         <Kpi label="State tenders" value={num(d.tenders?.length)} sub={d.tenders?.length ? `${num(d.tenders.filter((t: Row) => t.level === "L1").length)} as L1` : undefined} />
       </div>
-      {d.history?.length > 1 && (
-        <Panel title="Share price" sub="1 year, daily close (NSE)"><LineChart data={d.history} x="d" y="close" fmt={(v) => `₹${v.toFixed(0)}`} /></Panel>
-      )}
+      {d.history?.length > 1 && <PriceHistory rows={d.history} />}
       <div className="grid cols-3">
         <Panel title="Entities in group">
           <table className="tt"><tbody>{d.subsidiaries.map((s: Row) => (
@@ -72,7 +71,30 @@ export default function GroupDetail() {
         <Tenders rows={d.tenders} />
         <Licences rows={d.licences} />
       </div>
+      <Debarments rows={d.debarments} />
       <Dossier d={d} />
     </div>
+  );
+}
+
+const RANGES: [string, string, number][] = [["1y", "1Y", 365], ["5y", "5Y", 365 * 5], ["10y", "10Y", 365 * 10], ["max", "Max", 0]];
+
+function PriceHistory({ rows }: { rows: Row[] }) {
+  const [range, setRange] = useState("1y");
+  const data = useMemo(() => {
+    const days = RANGES.find((r) => r[0] === range)![2];
+    const cut = days ? new Date(Date.now() - days * 864e5).toISOString().slice(0, 10) : "";
+    const sel = cut ? rows.filter((r) => r.d >= cut) : rows;
+    // keep the chart light: at most ~800 points (weekly sampling for long ranges)
+    const step = Math.max(1, Math.ceil(sel.length / 800));
+    return sel.filter((_, i) => i % step === 0 || i === sel.length - 1);
+  }, [rows, range]);
+  const first = data[0]?.close, last = data[data.length - 1]?.close;
+  const chg = first && last ? ((last / first - 1) * 100).toFixed(0) : null;
+  return (
+    <Panel title="Share price" sub={`daily close (NSE) · since ${rows[0].d}${chg ? ` · ${Number(chg) >= 0 ? "+" : ""}${chg}% over range` : ""}`}
+      right={<Tabs value={range} onChange={setRange} tabs={RANGES.map(([k, l]) => [k, l] as [string, string])} />}>
+      <LineChart data={data} x="d" y="close" fmt={(v) => `₹${v.toFixed(0)}`} />
+    </Panel>
   );
 }

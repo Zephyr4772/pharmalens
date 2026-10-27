@@ -35,6 +35,38 @@ def enrichment(cur, mid: int) -> dict | None:
     return e
 
 
+
+def molecule_reference(cur, mids: list[int], form: str | None = None) -> dict | None:
+    """Reference text for a product without its own label: the CDCI generic monograph for exactly this set of
+    molecules (a combination gets the combination's monograph), else nothing; plus the US label for single molecules."""
+    if not mids:
+        return None
+    subs = maybe(cur, f"""SELECT molecule_id, identifier FROM cdci_substance
+                          WHERE molecule_id IN ({','.join('?' * len(mids))})""", mids)
+    by_mol: dict[int, set] = {}
+    for r in subs:
+        by_mol.setdefault(int(r["molecule_id"]), set()).add(str(r["identifier"]))
+    out: dict = {"scope": "molecule", "cdci": [], "us_label": None}
+    if len(by_mol) == len(set(mids)):
+        # every molecule is in CDCI: find generics whose substance set is exactly ours (any one substance per molecule)
+        rows = maybe(cur, """SELECT generic_name, substance_identifier, therapeutic_role, classification_of_drugs, indication,
+                                    contra_indication, interaction_with_drugs, dose_form
+                             FROM cdci_generic WHERE indication IS NOT NULL OR contra_indication IS NOT NULL
+                                                  OR interaction_with_drugs IS NOT NULL""")
+        want = [v for v in by_mol.values()]
+        hits = [r for r in rows if len(ids := set(str(r["substance_identifier"] or "").split("+"))) == len(want)
+                and all(ids & w for w in want)]
+        # prefer a monograph for the same dosage form (an injection should not show an oral tablet's entry)
+        fam = FORM_FAMILY.get((form or "").strip().lower()) or tuple(w for w in (form or "").lower().split() if len(w) > 3)
+        hits.sort(key=lambda r: (not any(w in (r["generic_name"] or "").lower() for w in fam), r["indication"] is None,
+                                 len(r["generic_name"] or "")))
+        out["cdci"] = hits[:3]
+    if len(set(mids)) == 1:
+        e = enrichment(cur, mids[0])
+        if e and e.get("us_label"):
+            out["us_label"] = {"sections": e["us_label"], "meta": e.get("us_label_meta")}
+    return out if (out["cdci"] or out["us_label"]) else None
+
 def procurement(cur, where: str, params: list, limit: int = 60) -> list[dict]:
     return maybe(cur, f"""SELECT buyer, state, item_code, item, kind, unit, rate, gst, level, supplier, company_id, tender_no,
                                  valid_from, valid_to, category, order_share, source_url FROM procurement_rates
@@ -150,14 +182,25 @@ def product(pid: int):
         FROM product_molecules pm JOIN molecules m ON m.id = pm.molecule_id WHERE pm.product_id = ?""", [pid])
     mids = [m["id"] for m in p["molecules"]]
     p["interactions"] = None
-    raw = cur.execute("SELECT raw FROM interactions WHERE product_id = ?", [pid]).fetchone()
-    if raw:
+    def parse_ix(raw):
         try:
-            d = json.loads(raw[0])
-            p["interactions"] = [{"drug": a.strip(), "brands": b.strip(), "severity": e}
-                                 for a, b, e in zip(d.get("drug", []), d.get("brand", []), d.get("effect", []))]
+            d = json.loads(raw)
+            return [{"drug": a.strip(), "brands": b.strip(), "severity": e}
+                    for a, b, e in zip(d.get("drug", []), d.get("brand", []), d.get("effect", []))]
         except (ValueError, TypeError):
-            pass
+            return []
+    raw = cur.execute("SELECT raw FROM interactions WHERE product_id = ?", [pid]).fetchone()
+    p["interactions"] = parse_ix(raw[0]) if raw else []
+    p["interactions_source"] = "product" if p["interactions"] else None
+    if not p["interactions"] and p["combo_id"]:
+        # interaction lists describe the molecules, so another brand of the same molecules carries the same list
+        for (other,) in cur.execute("""
+                SELECT i.raw FROM interactions i JOIN products q ON q.id = i.product_id JOIN combos k ON k.id = q.combo_id
+                WHERE k.mkey = (SELECT mkey FROM combos WHERE id = ?) AND len(json_extract(i.raw, '$.drug')::JSON[]) > 0
+                ORDER BY len(json_extract(i.raw, '$.drug')::JSON[]) DESC LIMIT 1""", [p["combo_id"]]).fetchall():
+            p["interactions"] = parse_ix(other)
+            p["interactions_source"] = "same_molecules"
+    p["interactions"] = p["interactions"] or None
     # same-composition ladder (cheapest first)
     p["equivalents"] = db.rows(cur, f"""
         SELECT {PRODUCT_COLS} {PRODUCT_FROM}
@@ -204,6 +247,7 @@ def product(pid: int):
     else:
         p["procurement"] = []
     p["pharmacology"] = enrichment(cur, mids[0]) if len(mids) == 1 else None
+    p["molecule_reference"] = molecule_reference(cur, mids, p.get("dosage_form")) if not info else None
     return cleanrows([p])[0]
 
 
@@ -383,6 +427,8 @@ def molecule(mid: int):
                                  GROUP BY 1 ORDER BY 2 DESC LIMIT 12""", [mid])
     k = str(mid)
     m["pharmacology"] = enrichment(cur, mid)
+    m["debarments"] = maybe(cur, f"""SELECT state, firm, drug_text, reason, ordered_on, years, document_url FROM firm_debarments
+                                     WHERE {has_mol()} ORDER BY ordered_on DESC NULLS LAST LIMIT 30""", [k])
     m["procurement"] = procurement(cur, has_mol(), [k])
     m["global"] = {
         "us_applications": maybe(cur, f"""SELECT a.application_number, a.sponsor, a.app_type, a.brands, a.dosage_forms, a.marketing_status,
@@ -526,6 +572,10 @@ def dossier(cur, owner_type: str, owner_id: int, base: dict) -> dict:
         SELECT r.buyer, r.item, r.unit, r.rate, r.level, r.order_share, r.tender_no, r.valid_to, r.category
         FROM procurement_rates r JOIN companies c ON c.id = r.company_id WHERE {comp_filter}
         ORDER BY (r.level = 'L1') DESC, r.buyer, r.item LIMIT 80""", [owner_id])
+    base["debarments"] = maybe(cur, f"""
+        SELECT d.state, d.authority, d.drug_text, d.reason, d.order_no, d.ordered_on, d.years, d.document_url
+        FROM firm_debarments d JOIN companies c ON c.id = d.company_id WHERE {comp_filter}
+        ORDER BY d.ordered_on DESC NULLS LAST LIMIT 40""", [owner_id])
     base["licences"] = maybe(cur, f"""
         SELECT b.license_number, count(*) brands, any_value(b.firm_name) firm
         FROM brand_registry b JOIN companies c ON c.id = b.company_id WHERE {comp_filter}

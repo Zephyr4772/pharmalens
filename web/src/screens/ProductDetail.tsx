@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BrandRegistry, Pharmacology, Procurement } from "../components/Depth";
+import { BrandRegistry, MoleculeReference, Pharmacology, Procurement } from "../components/Depth";
 import { Link, useParams } from "react-router-dom";
 import { day, get, inr, num, type Row } from "../lib/api";
 import { ErrorBox, Kpi, Loading, Panel, Star } from "../components/ui";
@@ -153,7 +153,7 @@ export default function ProductDetail() {
             <div><span>Sources</span>{d.sources} ({d.source_count} listings)</div>
           </div>
         </Panel>
-        <Panel title="Drug interactions" sub="reference — molecule level">
+        <Panel title="Drug interactions" sub={d.interactions_source === "same_molecules" ? "molecule level · listed on another brand with the same molecules" : "reference — molecule level"}>
           {d.interactions?.length ? (
             <table className="tt"><tbody>{d.interactions.map((x: Row, i: number) => (
               <tr key={i}><td>{x.drug}</td><td><span className={`badge ${x.severity === "MAJOR" ? "b-down" : x.severity === "MODERATE" ? "b-warn" : "b-mute"}`}>{x.severity}</span></td><td className="mut" title={x.brands}>{x.brands}</td></tr>
@@ -175,6 +175,7 @@ export default function ProductDetail() {
       </div>
       {d.label?.safety && <SafetyGrid safety={d.label.safety} />}
       {(d.label || d.uses || d.side_effects) && <LabelPanel d={d} />}
+      {!d.label && <MoleculeReference r={d.molecule_reference} />}
       <LivePanel id={d.id} catalogUnit={d.unit_price} />
       <Panel title="Cheapest same-composition brands" sub="per unit"><ProductTable rows={d.equivalents} /></Panel>
       <div className="grid cols-2">

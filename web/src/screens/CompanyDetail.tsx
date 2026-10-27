@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { get, inr, num } from "../lib/api";
 import { Dossier } from "../components/Dossier";
-import { Licences, Tenders } from "../components/Depth";
+import { Debarments, Licences, Tenders } from "../components/Depth";
 import { ErrorBox, Kpi, Loading, Star } from "../components/ui";
 
 export default function CompanyDetail() {
@@ -31,6 +31,7 @@ export default function CompanyDetail() {
         <Tenders rows={d.tenders} />
         <Licences rows={d.licences} />
       </div>
+      <Debarments rows={d.debarments} />
       <Dossier d={d} />
     </div>
   );

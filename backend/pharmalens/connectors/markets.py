@@ -1,6 +1,6 @@
 """Listed Indian pharma equities via Yahoo Finance (NSE, ~15 min delayed)."""
 import math
-from datetime import datetime, time as dtime
+from datetime import date, datetime, time as dtime
 from zoneinfo import ZoneInfo
 
 import yfinance as yf
@@ -75,6 +75,47 @@ class NseQuotes(Connector):
                               title=f"{name} {'▲' if chg > 0 else '▼'} {chg:+.1f}% at ₹{price:,.1f}",
                               entity_type="parent" if pid else None, entity_id=pid[0] if pid else None,
                               dedupe_key=f"move|{sym}|{h.index[-1].date()}|{int(chg)}")
+
+
+class NseHistory(Connector):
+    name = "nse_history"
+    title = "NSE Pharma Price History (full)"
+    agency = "NSE (via Yahoo Finance)"
+    schedule = {"trigger": "cron", "day_of_week": "sun", "hour": 19, "minute": 10}
+    description = "Every daily close Yahoo holds for each listed group (often back to the 2000s); gaps are refilled weekly."
+
+    def run(self):
+        import pandas as pd
+        tk = NseQuotes().tickers()
+        have = dict(db.cursor().execute("SELECT ticker, min(d) FROM quote_history GROUP BY 1").fetchall())
+        frames, per = [], {}
+        for sym in tk:
+            # one-year rows come from nse_fundamentals; fetch the full span once, then only when the start is missing
+            if have.get(sym) and (date.today() - have[sym]).days > 365 * 3:
+                continue
+            try:
+                h = yf.Ticker(sym).history(period="max", interval="1d", auto_adjust=False)
+            except Exception:  # noqa: BLE001 — one bad ticker must not stop the rest
+                continue
+            h = h.dropna(subset=["Close"])
+            if not len(h):
+                continue
+            frames.append(pd.DataFrame({"ticker": sym, "d": [x.date() for x in h.index],
+                                        "close": h["Close"].astype(float).round(4), "volume": h["Volume"].astype(float)}))
+            per[sym] = (h.index[0].date(), len(h))
+        if not frames:
+            self.stats.notes.append("all tickers already hold full history")
+            return
+        df = pd.concat(frames, ignore_index=True)
+        self.stats.rows_seen = len(df)
+        with db.writer() as w:
+            before = w.execute("SELECT count(*) FROM quote_history").fetchone()[0]
+            w.register("_qh", df)
+            w.execute("INSERT OR REPLACE INTO quote_history SELECT ticker, d, close, volume FROM _qh")
+            w.unregister("_qh")
+            self.stats.rows_new = w.execute("SELECT count(*) FROM quote_history").fetchone()[0] - before
+        oldest = min(v[0] for v in per.values())
+        self.stats.notes.append(f"{len(per)} tickers · earliest {oldest} · {len(df):,} daily closes")
 
 
 class NseFundamentals(Connector):

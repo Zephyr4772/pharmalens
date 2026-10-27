@@ -238,3 +238,98 @@ def num(s: str | None) -> float | None:
 
 TAMIL = {"அத்தியாவசிய மருந்து": "Essential Drug", "அறுவைசிகிச்சை": "Surgical", "சிறப்பு மருந்து": "Speciality Drug",
          "கால்நடை மருந்து": "Veterinary Drug", "தையல் பொருள்": "Suture"}
+
+
+class HmsclRates(Connector):
+    name = "hmscl_rates"
+    title = "Haryana HMSCL Rate Contracts"
+    agency = "HMSCL (Govt of Haryana)"
+    schedule = {"trigger": "cron", "day_of_week": "thu", "hour": 13, "minute": 10}
+    description = "Rate per unit (excl. GST) for every drug, surgical and suture on the Haryana essential list, with vendor and validity."
+    URL = "https://hmscl.org.in/Page.aspx?slug=drugs-surgical-sutures&q=&group=&level=&pageSize=25&page={}"
+
+    def run(self):
+        rows, page, pages = [], 1, 1
+        while page <= pages and page <= 60:
+            html = self.get(self.URL.format(page), timeout=60).text
+            self.archive(html, "html", key=f"hmscl-{date.today():%Y%m%d}-p{page}")
+            m = re.search(r"Page \d+ of (\d+)", html)
+            pages = int(m.group(1)) if m else page
+            for tr in LexborHTMLParser(html).css("table tr"):
+                c = [td.text(strip=True) for td in tr.css("td")]
+                if len(c) < 9 or not c[0].isdigit():
+                    continue
+                rows.append({"code": c[1], "edl": fix_mojibake(c[2]), "item": fix_mojibake(c[3] or c[2]), "rc": c[4], "rate": num(c[5]),
+                             "supplier": c[6], "from": dmy(c[7]), "to": dmy(c[8])})
+            page += 1
+        self.stats.rows_seen = len(rows)
+        if len(rows) < 100:
+            raise RuntimeError(f"HMSCL parse looks wrong ({len(rows)} rows from {pages} pages)")
+        with db.writer() as w:
+            before = w.execute("SELECT count(*) FROM procurement_rates WHERE buyer = 'HMSCL'").fetchone()[0]
+            w.execute("DELETE FROM procurement_rates WHERE buyer = 'HMSCL'")
+            for r in rows:
+                kind = item_kind(r["edl"])
+                mids = matcher.molecules_in(r["edl"], limit=5) if kind == "drug" else []
+                # rates are per the contract's unit as written in the item ("10*10", "170 ml bottle")
+                unit = (re.search(r",\s*([^,]*\d[^,]*)$", r["item"]) or [None, None])[1]
+                w.execute(f"INSERT INTO procurement_rates ({RATE_COLS}) VALUES ('HMSCL','Haryana',?,?,?,?,?,?,?,?,NULL,'RC',?,?,?,?, now(),?,NULL)",
+                          [r["code"], r["item"], kind, r["rc"], r["supplier"], matcher.company_for(r["supplier"]), unit, r["rate"],
+                           r["from"], r["to"], ",".join(map(str, mids)) or None, self.URL.format(1), "Essential Drug List"])
+            self.stats.rows_new = max(0, len(rows) - before)
+        self.stats.notes.append(f"{pages} pages · {len(rows):,} contracts")
+
+
+class UpmsclDebarments(Connector):
+    name = "upmscl_debarments"
+    title = "Uttar Pradesh UPMSCL Firm Blacklisting"
+    agency = "UPMSCL (Govt of Uttar Pradesh)"
+    schedule = {"trigger": "cron", "hour": 10, "minute": 35}
+    description = "Firms blacklisted by UP's medical supplies corporation, mostly for NSQ batches: drug, reason, order, date and duration."
+    URL = "https://upmsc.in/Home/NSQ"
+
+    def run(self):
+        html = self.get(self.URL, timeout=60).text
+        self.archive(html, "html", key=f"upmscl-nsq-{date.today():%Y%m%d}")
+        rows = []
+        for tr in LexborHTMLParser(html).css("table tr"):
+            tds = tr.css("td")
+            if len(tds) < 8 or not tds[0].text(strip=True).isdigit():
+                continue
+            c = [re.sub(r"\s+", " ", td.text(strip=True)) for td in tds]
+            a = tds[8].css_first("a") if len(tds) > 8 else None
+            drug = re.sub(r"(?i)^firm blacklisted for (?:the )?drug\s*-\s*", "", c[1]).strip()
+            rows.append({"what": c[1], "drug": drug, "firm": c[2], "address": c[3], "reason": c[4], "order": c[5],
+                         "date": dmy(c[6]), "years": num(c[7]),
+                         "doc": doc_url(a.attributes.get("href", "")) if a else None})
+        self.stats.rows_seen = len(rows)
+        if not rows:
+            raise RuntimeError("UPMSCL blacklisting table not found")
+        with db.writer() as w:
+            for r in rows:
+                key = norm(f"upmscl|{r['order']}|{r['firm']}|{r['drug'][:60]}")
+                if w.execute("SELECT 1 FROM firm_debarments WHERE dedupe_key = ?", [key]).fetchone():
+                    continue
+                cid = matcher.company_for(r["firm"])
+                pid = matcher.parent_for(r["firm"])
+                mids = matcher.molecules_in(r["drug"], limit=5)
+                w.execute("""INSERT INTO firm_debarments (authority, state, firm, address, subject, drug_text, reason, order_no, ordered_on,
+                             years, document_url, company_id, parent_id, molecule_ids, source_url, dedupe_key, fetched_at)
+                             VALUES ('UPMSCL','Uttar Pradesh',?,?,?,?,?,?,?,?,?,?,?,?,?,?, now())""",
+                          [r["firm"], r["address"], r["what"], r["drug"], r["reason"], r["order"], r["date"], r["years"], r["doc"],
+                           cid, pid, ",".join(map(str, mids)) or None, self.URL, key])
+                self.stats.rows_new += 1
+                if r["date"] and (date.today() - r["date"]).days <= 120:
+                    self.emit(w, kind="nsq", severity="high", ts=r["date"],
+                              title=f"UP blacklists {r['firm']} for {r['years']:g} yr: {r['drug'][:100]}" if r["years"] else f"UP blacklists {r['firm']}: {r['drug'][:100]}",
+                              body=r["reason"], url=r["doc"] or self.URL, entity_type="company" if cid else None, entity_id=cid,
+                              dedupe_key=f"debar|{key}", payload={"molecule_ids": mids, "state": "Uttar Pradesh"})
+
+
+def doc_url(href: str) -> str | None:
+    """UPMSCL links carry JSON-escaped slashes and raw spaces ("/NsqFiles\/x_Office order.pdf")."""
+    from urllib.parse import quote
+    href = (href or "").replace("\\", "").strip()
+    if not href:
+        return None
+    return "https://upmsc.in" + quote(href if href.startswith("/") else "/" + href, safe="/:%")

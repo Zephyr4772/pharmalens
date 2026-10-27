@@ -167,3 +167,51 @@ export function UsPortfolio({ p, recent, ndc, pq }: { p: Row | null | undefined;
     </Panel>
   );
 }
+
+export function MoleculeReference({ r }: { r: Row | null | undefined }) {
+  const [sec, setSec] = useState<string | null>(null);
+  if (!r) return null;
+  const g: Row | undefined = r.cdci?.[0];
+  const label: Row = r.us_label?.sections ?? {};
+  const keys = Object.keys(LABEL_TITLES).filter((k) => label[k]);
+  const open = sec ?? keys[0];
+  return (
+    <Panel title="Molecule reference" sub="no product label on record — molecule-level reference text, not this brand's own leaflet">
+      <div className="grid cols-2">
+        <div className="stack-sm">
+          {g ? (
+            <>
+              <div className="faint">CDCI national drug terminology · {g.generic_name}</div>
+              {g.therapeutic_role && <div className="chips"><span className="chip">{g.therapeutic_role}</span>{g.classification_of_drugs && <span className="chip">{g.classification_of_drugs}</span>}</div>}
+              {g.indication && <div><div className="mut">Indication</div><div className="label-text">{g.indication}</div></div>}
+              {g.contra_indication && <div><div className="mut">Contraindications</div><div className="label-text">{g.contra_indication}</div></div>}
+              {g.interaction_with_drugs && <div><div className="mut">Interactions</div><div className="label-text">{g.interaction_with_drugs}</div></div>}
+            </>
+          ) : <div className="empty">no CDCI monograph for this exact composition</div>}
+        </div>
+        <div>
+          {keys.length ? (
+            <>
+              <div className="faint">US prescribing label · {r.us_label.meta?.generic} · {r.us_label.meta?.manufacturer}</div>
+              <div className="chips">{keys.map((k) => (
+                <button key={k} className={`chip ${k === open ? "chip-on" : ""}`} onClick={() => setSec(k)}>{LABEL_TITLES[k]}</button>))}</div>
+              <div className="label-text">{label[open]}</div>
+            </>
+          ) : <div className="empty">no single-ingredient US label</div>}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+export function Debarments({ rows, showFirm = false }: { rows: Row[] | undefined; showFirm?: boolean }) {
+  if (!rows?.length) return null;
+  return (
+    <Panel title="State blacklisting orders" sub="firms debarred by state medical corporations, mostly for NSQ batches">
+      <table className="tt"><tbody>{rows.map((d, i) => (
+        <tr key={i}><td>{day(d.ordered_on)}</td><td className="mut">{d.state}</td>{showFirm && <td title={d.firm}>{d.firm}</td>}
+          <td title={d.drug_text}>{d.drug_text}</td><td className="neg">{d.reason}</td><td className="faint">{d.years ? `${d.years} yr` : ""}</td>
+          <td>{d.document_url && <a href={d.document_url} target="_blank" rel="noreferrer">order</a>}</td></tr>))}</tbody></table>
+    </Panel>
+  );
+}

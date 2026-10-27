@@ -493,3 +493,10 @@ CREATE TABLE IF NOT EXISTS id_registry (
     first_seen TIMESTAMP DEFAULT current_timestamp,
     PRIMARY KEY (kind, key)
 );
+
+-- State procurement agencies' firm blacklisting / debarment orders (mostly for NSQ batches)
+CREATE TABLE IF NOT EXISTS firm_debarments (
+    authority VARCHAR, state VARCHAR, firm VARCHAR, address VARCHAR, subject VARCHAR, drug_text VARCHAR, reason VARCHAR,
+    order_no VARCHAR, ordered_on DATE, years DOUBLE, document_url VARCHAR, company_id INTEGER, parent_id INTEGER,
+    molecule_ids VARCHAR, source_url VARCHAR, dedupe_key VARCHAR UNIQUE, fetched_at TIMESTAMP
+);

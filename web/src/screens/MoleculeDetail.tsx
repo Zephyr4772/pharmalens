@@ -6,7 +6,7 @@ import { ShareTable } from "../components/Share";
 import { ErrorBox, Kpi, Loading, Pager, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 import { Outcome } from "./Pipeline";
-import { GlobalRegs, Pharmacology, Procurement } from "../components/Depth";
+import { Debarments, GlobalRegs, Pharmacology, Procurement } from "../components/Depth";
 
 export default function MoleculeDetail() {
   const { id } = useParams();
@@ -120,6 +120,7 @@ export default function MoleculeDetail() {
           </Panel>
         </div>
       )}
+      <Debarments rows={d.debarments} showFirm />
       <Panel title={`Single-molecule brands — cheapest per unit first`} sub={prods.data ? `${num(prods.data.meta.total)} active SKUs` : ""}
         right={<Link to={`/screener?molecule_id=${d.id}`}>open in screener ›</Link>}>
         {prods.isLoading ? <Loading /> : <ProductTable rows={prods.data?.data ?? []} />}

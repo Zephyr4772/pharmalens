@@ -204,7 +204,8 @@ class CdscoSec(Connector):
     schedule = {"trigger": "cron", "hour": "11,18", "minute": 45}
     description = ("Every SEC agenda item: clinical-trial permissions, marketing permissions, BE/Phase-III waivers — "
                    "drug, firm, committee and outcome. The forward pipeline of what is about to launch in India.")
-    backfill_days = 540
+    backfill_days = 365 * 12        # the listing goes back to 2015
+    per_run = 250                   # each document is a PDF to fetch and parse: the backlog clears over a few runs
 
     def run(self):
         html = self.get(CDSCO + "/opencms/opencms/en/Committees/SEC/").text
@@ -219,8 +220,12 @@ class CdscoSec(Connector):
         seen = {r[0] for r in cur.execute("SELECT url FROM reg_documents WHERE doc_type = 'sec_recommendation'").fetchall()}
         cutoff = date.today() - timedelta(days=self.backfill_days)
         todo = [i for i in items if i["url"] not in seen and i["date"] and i["date"] >= cutoff]
-        self.stats.notes.append(f"{len(todo)} new documents")
-        for it in sorted(todo, key=lambda x: x["date"]):
+        # newest first, so fresh minutes are never queued behind the historical backlog
+        todo = sorted(todo, key=lambda x: x["date"], reverse=True)
+        backlog = max(0, len(todo) - self.per_run)
+        todo = todo[: self.per_run]
+        self.stats.notes.append(f"{len(todo)} new documents" + (f"; {backlog} older ones queued for later runs" if backlog else ""))
+        for it in todo:
             pdf = cdsco_file(self, it["url"])
             with db.writer() as w:
                 w.execute("INSERT OR IGNORE INTO reg_documents (agency, doc_type, title, published_on, url, dedupe_key, fetched_at) VALUES ('CDSCO','sec_recommendation',?,?,?,?, now())",
