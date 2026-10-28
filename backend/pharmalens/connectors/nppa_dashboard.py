@@ -52,7 +52,7 @@ class NppaDashboard:
         # the CSRF endpoint answers "Session Expired" unless the request looks same-origin
         self.c = httpx.Client(headers={"User-Agent": UA, "X-Requested-With": "XMLHttpRequest", "Origin": HOST,
                                        "Referer": HOST + "/HISUtilities/dashboard/dashBoardACTION.cnt"},
-                              timeout=90, verify=tls.CONTEXT, follow_redirects=True)
+                              timeout=90, transport=tls.transport(), follow_redirects=True)
         page = self.c.get(PAGE).text
         m = re.search(r"""name=['"]tid['"][^>]*value=['"]([^'"]+)""", page)
         self.tid = m.group(1) if m else ""

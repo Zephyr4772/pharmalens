@@ -46,6 +46,13 @@ def context() -> ssl.SSLContext:
 CONTEXT = context()
 
 
+def transport() -> httpx.HTTPTransport:
+    """Verified, IPv4-only transport for feed clients. The server has no IPv6 route to the internet, and several
+    government hosts publish IPv6 addresses (cdsco.gov.in at times resolves to IPv6 only): binding to 0.0.0.0 makes
+    every connection resolve and use IPv4. Connection errors are retried twice before a feed sees them."""
+    return httpx.HTTPTransport(verify=CONTEXT, local_address="0.0.0.0", retries=2)
+
+
 def _issuer_for(cert: x509.Certificate) -> x509.Certificate | None:
     """The issuing CA's certificate: pinned locally if we have it, else from the URL the certificate names."""
     for pem in sorted(CERTS.glob("*.pem")):
@@ -58,7 +65,8 @@ def _issuer_for(cert: x509.Certificate) -> x509.Certificate | None:
         return None
     for d in aia:
         if d.access_method == AuthorityInformationAccessOID.CA_ISSUERS:
-            body = httpx.get(d.access_location.value, timeout=20, follow_redirects=True).content
+            with httpx.Client(transport=transport(), timeout=20, follow_redirects=True) as c:
+                body = c.get(d.access_location.value).content
             # CAs publish their certificate as DER, PEM or a PKCS#7 bundle (eMudhra)
             for load in (lambda b: [x509.load_der_x509_certificate(b)], lambda b: [x509.load_pem_x509_certificate(b)],
                          pkcs7.load_der_pkcs7_certificates, pkcs7.load_pem_pkcs7_certificates):
@@ -84,8 +92,9 @@ def revocation_status(host: str) -> dict:
         if not urls or issuer is None:
             return {"status": "unknown", "reason": None, "detail": "no OCSP responder or issuer certificate"}
         req = ocsp.OCSPRequestBuilder().add_certificate(cert, issuer, hashes.SHA1()).build()
-        r = httpx.post(urls[0], content=req.public_bytes(serialization.Encoding.DER),
-                       headers={"Content-Type": "application/ocsp-request"}, timeout=20)
+        with httpx.Client(transport=transport(), timeout=20) as c:
+            r = c.post(urls[0], content=req.public_bytes(serialization.Encoding.DER),
+                       headers={"Content-Type": "application/ocsp-request"})
         resp = ocsp.load_der_ocsp_response(r.content)
         if resp.response_status != ocsp.OCSPResponseStatus.SUCCESSFUL:
             return {"status": "unknown", "reason": None, "detail": f"OCSP {resp.response_status.name}"}

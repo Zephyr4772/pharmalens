@@ -34,7 +34,8 @@ def cdsco_file(conn: Connector, download_url: str) -> bytes | None:
     url = CDSCO + m.group(1).replace(" ", "%20")
     for attempt in range(3):
         try:
-            f = httpx.get(url, headers={"User-Agent": BROWSER_UA, "Connection": "close"}, timeout=90, verify=tls.CONTEXT)
+            with httpx.Client(transport=tls.transport(), timeout=90) as c:
+                f = c.get(url, headers={"User-Agent": BROWSER_UA, "Connection": "close"})
             if f.status_code == 200 and f.content.startswith(b"%PDF"):
                 return f.content
         except httpx.HTTPError:

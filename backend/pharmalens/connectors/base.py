@@ -44,7 +44,7 @@ class Connector:
     def http(self) -> httpx.Client:
         if self._http is None:
             self._http = httpx.Client(
-                timeout=HTTP_TIMEOUT, follow_redirects=True, verify=tls.CONTEXT,
+                timeout=HTTP_TIMEOUT, follow_redirects=True, transport=tls.transport(),
                 headers={"User-Agent": BROWSER_UA, "Accept-Language": "en-IN,en;q=0.9"},
             )
         return self._http
