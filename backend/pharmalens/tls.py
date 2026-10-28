@@ -28,7 +28,7 @@ FEED_HOSTS = [
     "download.open.fda.gov", "www.accessdata.fda.gov", "dailymed.nlm.nih.gov", "clinicaltrials.gov", "www.who.int",
     "extranet.who.int", "www.ema.europa.eu", "www.ebi.ac.uk", "www.nseindia.com", "api.gdeltproject.org",
     "news.google.com", "health.economictimes.indiatimes.com", "www.expresspharma.in", "thehealthmaster.com",
-    "www.netmeds.com", "apiv2.netmeds.com", "www.ipca.com", "raw.githubusercontent.com", "api.drugsetu.com",
+    "www.netmeds.com", "apiv2.netmeds.com", "www.ipca.com", "raw.githubusercontent.com",
 ]
 BENIGN_REVOCATION = {"superseded", "cessation_of_operation", "affiliation_changed"}
 

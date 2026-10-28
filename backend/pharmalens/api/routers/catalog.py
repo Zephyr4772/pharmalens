@@ -294,11 +294,10 @@ def product(pid: int):
 
 
 @router.get("/products/{pid}/live")
-async def product_live(pid: int):
-    """Live DrugSetu record (current MRP per pack, safety profile); cached 14 days, quota-aware."""
-    from fastapi.concurrency import run_in_threadpool
-    from ...connectors.drugsetu import lookup
-    row = await run_in_threadpool(lookup, pid)
+def product_live(pid: int):
+    """Stored DrugSetu record (MRP per pack, safety profile as fetched in Oct 2026); the source is retired."""
+    from ...connectors.drugsetu import saved_record
+    row = saved_record(pid)
     if not row:
         return {"found": False}
     for k in ("safety", "raw"):

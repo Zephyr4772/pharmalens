@@ -7,7 +7,6 @@ from .procurement_safety import FdaImportAlert6640, HmsclRates, PvpiAlerts, Rmsc
 from .enrichment import MoleculeEnrichment
 from .cdsco_portal import CdscoApprovalsDb, CdscoBrandRegistry, CdscoNsqPortal
 from .cdsco import CdscoAlerts, CdscoBannedFdc, CdscoGazette, CdscoNsq, NsqMirror
-from .drugsetu import DrugSetuHarvest, DrugSetuLaunches
 from .global_reg import OpenFdaIndiaRecalls
 from .international import EmaMedicines, NseFilings, OpenFdaBulk, WhoPrequal
 from .gov_india import JanAushadhi, NppaOrders
@@ -21,7 +20,7 @@ REGISTRY = {c.name: c for c in [
     CdscoNsq, NsqMirror, CdscoBannedFdc, CdscoGazette, CdscoAlerts,
     NppaOrders, NppaRetailPrices, MfrPriceLists, JanAushadhi,
     NseQuotes, NseFundamentals, NseHistory,
-    PharmaNews, NewsArchive, OpenFdaIndiaRecalls, DrugSetuLaunches, DrugSetuHarvest,
+    PharmaNews, NewsArchive, OpenFdaIndiaRecalls,
     CdscoApprovals, CdscoSec, Nlem, ClinicalTrialsIndia, NppaCompendium,
     CdscoNsqPortal, CdscoApprovalsDb, CdscoBrandRegistry,
     OpenFdaBulk, WhoPrequal, EmaMedicines, NseFilings, Cdci,

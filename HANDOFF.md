@@ -21,7 +21,7 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
   - All 13 terminal screens (incl. PIPE, ALERT) + detail pages, verified in the browser pane
 - **Launch config**: `D:\pharmacopy\.claude\launch.json` → `pharmalens` (port 8010; serves `web/dist`). A copy is at `.claude/launch.root.json`.
 - **Alert channels**: Telegram and email need `TELEGRAM_BOT_TOKEN` / `SMTP_*` in `.env`; webhooks and the inbox work without setup. Dispatcher tested end to end with a local webhook; Telegram/SMTP not tested against real accounts.
-- **DrugSetu**: trial key in `.env` (5 items/page, ~1 req/s, limited quota). `drugsetu_harvest` copies the full catalog (resumable cursor in `drugsetu_state`) into `drugsetu_products` + `data/sources/drugsetu/*.jsonl.gz`; build_core merges it into the catalog; product pages fall back to the saved copy. On quota/auth refusal the API is paused 6 h (`drugsetu_state.paused_until`).
+- **DrugSetu**: retired 2026-10-28 (trial over). Feeds and API client removed; `drugsetu_products` (456) and `data/sources/drugsetu/` kept, merged into the catalog by build_core, shown on product pages as a saved copy (`connectors/drugsetu.saved_record`). The `DRUGSETU_API_KEY` line in the server `.env` is now unused.
 - **Catalog**: rebuilt after the last pattern change; nothing pending.
 
 ## Server (live copy since 2026-10-27)
@@ -95,13 +95,13 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
    company (Emcutix, Stedman, La Pristine, Modi Mundi, Gennova…) — add to parents/companies seeds to match them.
    Git: Windows credential manager lost the GitHub login; push with
    `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push` (gh is signed in).
-5. Then: retire `drugsetu_harvest` / `drugsetu_launches` and the product page's DrugSetu live lookup.
+5. **Done 2026-10-28:** `drugsetu_harvest` / `drugsetu_launches` retired, product page shows the stored record only (no API calls). Data kept.
 
 ## Next candidates
 0. Register at nrces.in for official CDCI files (`CDCI_BASE_URL`). Review leftover one-product junk molecules (e.g. brand glued to a molecule: 'Vensat Bioamoxycillin').
 1. CTRI direct (search is CAPTCHA-protected; currently via ClinicalTrials.gov cross-registration). SEC rows from committees with non-standard tables (~107 'other').
 2. OCR for scanned CDSCO NSQ PDFs (0-row months listed in the feed note).
-3. E-pharmacy price refresh beyond DrugSetu, within rate limits. Court-stay tracking for bans.
+3. More manufacturer price lists (OCR for scanned ones like Ajanta; seed the ~15 unrecognised companies). Court-stay tracking for bans.
 4. USFDA warning letters (fda.gov blocks curl; import alerts are done via accessdata.fda.gov). More state procurement (KMSCL Kerala, others), WHO DDD values, PvPI signal reports.
 
 ## Gotchas

@@ -47,7 +47,7 @@ export default function Feeds() {
       </Panel>
       <div className="grid cols-2">
         <Panel title="Sources" bodyClass="prose">
-          <p><b>Catalog spine:</b> Indian Medicine Master Dataset (Kaggle, Sept 2026; 17 merged datasets from 1mg, Apollo, Netmeds, NPPA), overlaid with a 2025 1mg scrape for newer MRPs and in-stock flags, and DrugSetu live records. Prices show their "as of" date everywhere.</p>
+          <p><b>Catalog spine:</b> Indian Medicine Master Dataset (Kaggle, Sept 2026; 17 merged datasets from 1mg, Apollo, Netmeds, NPPA), overlaid with a 2025 1mg scrape for newer MRPs and in-stock flags, and manufacturers' own Form V price lists for current MRPs and trade prices. Prices show their "as of" date everywhere.</p>
           <p><b>Government:</b> CDSCO (NSQ/spurious monthly lists, Section 26A prohibitions, gazette, alerts, circulars), NPPA (orders, draft price sheets, Authority minutes, and the official Compendium of Prices from the IPDMS dashboard), PMBI Jan Aushadhi product &amp; MRP list, NLEM 2022.</p>
           <p><b>Pipeline:</b> CDSCO new drug approvals (yearly lists since 2015), every Subject Expert Committee agenda item (trial and marketing permissions, BE waivers, with outcome), and interventional trials with Indian sites from ClinicalTrials.gov (CTRI search is CAPTCHA-protected, so CTRI ids come from cross-registration).</p>
           <p><b>Markets &amp; news:</b> NSE quotes via Yahoo Finance (~15 min delayed), openFDA recall enforcement reports for Indian firms, ET HealthWorld, Express Pharma and targeted Google News queries.</p>

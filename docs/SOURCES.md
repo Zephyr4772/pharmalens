@@ -74,7 +74,7 @@ archives under `data/raw/<connector>/` predate the lake).
 | 1mg 2025 scrape (Kaggle) | 2025 MRPs, stock | ingested |
 | junioralive/Indian-Medicine-Dataset (GitHub, updated 2026-06, MIT) | 254k brands; diffed 2026-10-17: all 248,736 distinct names already in the master dataset — copy kept in `data/sources/junioralive/` | checked, nothing new |
 | medcheck, nuskha, Nazar (GitHub) | derived NSQ / WHO-alert sets; used to locate official endpoints | reference only |
-| DrugSetu API | live MRP + safety; trial quota exhausted | cached copy kept |
+| DrugSetu API | MRP + safety for 456 products (Oct 2026 trial) | **retired 2026-10-28**; stored copy merged into the catalog, replaced by our own sources (see HANDOFF) |
 
 ## Not used
 Live scraping of e-pharmacy sites (1mg, PharmEasy, Netmeds, Apollo): their terms restrict automated collection.

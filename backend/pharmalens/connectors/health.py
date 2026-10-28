@@ -59,7 +59,7 @@ class HealthWatch(Connector):
         last_ok = dict(cur.execute("SELECT connector, max(finished_at) FROM connector_runs WHERE status = 'ok' GROUP BY 1").fetchall())
         now = datetime.now()
         for name, cls in REGISTRY.items():
-            if name in ("health_watch", "drugsetu_harvest", "drugsetu_launches"):   # DrugSetu is knowingly paused
+            if name == "health_watch":
                 continue
             r = runs.get(name, [])
             if len(r) >= 2 and all(s == "error" for s, _, _ in r):

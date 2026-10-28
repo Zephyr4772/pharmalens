@@ -6,7 +6,7 @@
 |---|---|---|---|
 | Catalog | Indian Medicine Master Dataset (Kaggle, Sept 2026; 17 merged sets from 1mg, Apollo, Netmeds, NPPA) | rebuild on demand | 543k products, joined on normalised name |
 | 2025 prices | 1mg scrape (Kaggle `apkaayush`, 2025) | static | Newer MRP, Rx flag, in-stock flag for ~251k products |
-| DrugSetu | api.drugsetu.com | every 6 h + on product view; full-catalog harvest every 30 min until complete | Live MRP per pack, safety profile; newest-first list = launch feed. Every record fetched is kept permanently in `drugsetu_products` and in `data/sources/drugsetu/*.jsonl.gz`, merged into the catalog on rebuild, and served as a labelled saved copy when the API is unavailable. Trial: 5 items/page, ~1 req/s, capped quota |
+| DrugSetu | api.drugsetu.com | retired 2026-10-28 (trial over) | 456 products fetched during the trial are kept in `drugsetu_products` and `data/sources/drugsetu/*.jsonl.gz`, merged into the catalog on rebuild and shown on product pages as a dated saved copy. Replaced by label text shared by composition, NPPA launch prices, CDSCO/CDCI new-brand tracking and manufacturers' Form V price lists |
 | CDSCO NSQ / spurious | cdsco.gov.in NSQ archive | daily 09:10 | Monthly central + state lab PDFs, parsed to batch level |
 | NSQ mirror | thehealthmaster.com | daily 09:40 | CDSCO moved NSQ to a new portal in Aug 2025; later months come from republished CDSCO PDFs, labelled "via mirror" |
 | Prohibited FDCs | cdsco.gov.in Drugs › FDC | daily 09:00 | Every Section 26A notification since 1983 (690 entries) |
@@ -117,7 +117,7 @@ Parent groups follow corporate actions recorded in the seed. JB Chemicals & Phar
 
 ## Known limitations
 
-- Catalog MRPs are dated, and the "as of" year is shown everywhere. DrugSetu live prices refresh individual products when they are viewed.
+- Catalog MRPs are dated, and the "as of" date is shown everywhere. Manufacturers' own price lists (Form V) refresh matched products twice a week.
 - SEC agenda tables come in at least five layouts (4 to 12 columns, merged cells, layouts changing mid-document). Numbered rows are read as serial / drug / firm / recommendation from their filled cells; partial rows are placed by the nearest heading. Outcomes are classified by intent: an explicit grant wins even with conditions attached, while "recommended that the firm should…" means more data is required (deferred). Ambiguous text stays "noted"; read the linked PDF for the full recommendation.
 - US data (shortages, FAERS, labels) describe the US market and are labelled as such. FAERS counts are spontaneous reports: they show what gets reported, not how often reactions happen.
 - Procurement rates are matched to molecules by name only; a rate's pack (e.g. 10×10 tablets) must be read before comparing with retail MRP.

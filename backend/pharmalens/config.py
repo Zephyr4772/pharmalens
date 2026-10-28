@@ -35,7 +35,6 @@ WEB_DIST = REPO_ROOT / "web" / "dist"
 USER_AGENT = "PharmaLens/4.0 (+research; contact via repo)"
 HTTP_TIMEOUT = 45.0
 
-DRUGSETU_API_KEY = os.getenv("DRUGSETU_API_KEY", "")
 OPENFDA_API_KEY = os.getenv("OPENFDA_API_KEY", "")
 
 SCHEMA_VERSION = "4.0.0"

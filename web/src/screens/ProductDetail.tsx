@@ -97,22 +97,21 @@ const SAFETY_LABEL: Record<string, string> = {
 
 function LivePanel({ id, catalogUnit }: { id: number; catalogUnit: number | null }) {
   const live = useQuery({ queryKey: ["product-live", id], queryFn: () => get(`/products/${id}/live`), staleTime: 3600_000 });
-  if (live.isLoading) return <Panel title="Live listing" sub="DrugSetu"><Loading what="checking live listing" /></Panel>;
-  if (!live.data?.found) return null;
+  if (live.isLoading || !live.data?.found) return null;
   const l = live.data;
   // compare per unit: live and catalog often quote different pack sizes
   const pk = (l.packagings ?? []).find((p: Row) => p.mrp && Number(p.qty) > 0);
   const liveUnit = pk ? pk.mrp / Number(pk.qty) : null;
   const delta = liveUnit && catalogUnit ? ((liveUnit / catalogUnit - 1) * 100) : null;
   return (
-    <Panel title={l.stale ? "DrugSetu listing (saved copy)" : "Live listing"}
-      sub={l.stale ? `saved ${day(l.fetched_at)} · live API unavailable, showing the stored record` : `DrugSetu · fetched ${day(l.fetched_at)}`}>
+    <Panel title="DrugSetu listing (saved copy)"
+      sub={`fetched ${day(l.fetched_at)} · DrugSetu is retired; this is the record it returned then`}>
       <div className="grid cols-2">
         <div>
-          <table className="tt"><thead><tr><th>Pack</th><th>Form</th><th className="num">MRP now</th></tr></thead>
+          <table className="tt"><thead><tr><th>Pack</th><th>Form</th><th className="num">MRP then</th></tr></thead>
             <tbody>{l.packagings.map((p: Row, i: number) => <tr key={i}><td>{p.packaging}</td><td className="mut">{p.product_form}</td><td className="num amb">{inr(p.mrp)}</td></tr>)}</tbody></table>
           {delta != null && Math.abs(delta) >= 0.5 && (
-            <div className="note">Live price ₹{liveUnit!.toFixed(2)}/unit is <b className={delta > 0 ? "neg" : "pos"}>{delta > 0 ? "+" : ""}{delta.toFixed(1)}%</b> vs catalog ₹{catalogUnit!.toFixed(2)}/unit.</div>
+            <div className="note">DrugSetu price ₹{liveUnit!.toFixed(2)}/unit was <b className={delta > 0 ? "neg" : "pos"}>{delta > 0 ? "+" : ""}{delta.toFixed(1)}%</b> vs catalog ₹{catalogUnit!.toFixed(2)}/unit.</div>
           )}
           <div className="kv">
             <div><span>Marketer</span>{l.marketing_company ?? "—"}</div>

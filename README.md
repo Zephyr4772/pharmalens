@@ -39,7 +39,7 @@ Open http://localhost:8010. The server runs the connector scheduler in-process (
 `PHARMALENS_SCHEDULER=0` to disable). Run a connector by hand with
 `py -3 -m pharmalens.connectors run <name>` (it goes through the server if one is running).
 
-Put secrets in `.env` (see `.env.example`): `DRUGSETU_API_KEY` (private `ds_…` key), optional `OPENFDA_API_KEY`, and for alerts `TELEGRAM_BOT_TOKEN` and/or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`.
+Put secrets in `.env` (see `.env.example`): optional `OPENFDA_API_KEY`, and for alerts `TELEGRAM_BOT_TOKEN` and/or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`.
 
 ## Data
 
