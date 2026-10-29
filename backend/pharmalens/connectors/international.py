@@ -121,6 +121,7 @@ class OpenFdaBulk(Connector):
         def frame(rows, cols):
             return pd.DataFrame(rows, columns=cols)
 
+        new_total = 0
         with db.writer() as w:
             for t, cols, rows in [
                 ("us_applications", ["application_number", "sponsor", "parent_id", "app_type", "brands", "ingredients", "dosage_forms",
@@ -131,17 +132,23 @@ class OpenFdaBulk(Connector):
                 ("us_ndc", ["product_ndc", "labeler", "parent_id", "brand", "generic", "dosage_form", "marketing_category",
                             "application_number", "manufacturer", "molecule_ids"], ndc_rows),
             ]:
+                # the bulk files are reloaded whole: count as new only rows whose identity was not there before
+                key_cols = {"us_applications": 1, "us_orange_book": 2, "us_patents": 4, "us_ndc": 1}[t]
+                before = {tuple(r) for r in w.execute(f"SELECT {', '.join(cols[:key_cols])} FROM {t}").fetchall()}
+                new_total += sum(1 for r in rows if tuple(r[:key_cols]) not in before)
                 w.execute(f"DELETE FROM {t}")
                 df = frame(rows, cols)
                 w.register("_df", df)
                 w.execute(f"INSERT INTO {t} ({', '.join(cols)}) SELECT {', '.join(cols)} FROM _df")
                 w.unregister("_df")
             # current US shortages replace the 2024 legacy snapshot
+            had = {r[0] for r in w.execute("SELECT id FROM shortages WHERE region = 'US'").fetchall()}
+            new_total += sum(1 for r in sh_rows if r[0] not in had)
             w.execute("DELETE FROM shortages WHERE region = 'US'")
             w.register("_sh", frame(sh_rows, ["id", "region", "molecule_text", "company", "status", "reason", "category", "updated_on", "source", "molecule_ids"]))
             w.execute("INSERT OR REPLACE INTO shortages SELECT * FROM _sh")
             w.unregister("_sh")
-        self.stats.rows_new = len(app_rows) + len(ob_rows) + len(ndc_rows) + len(sh_rows)
+        self.stats.rows_new = new_total
         self.stats.notes.append(f"{len(app_rows):,} applications · {len(ob_rows):,} OB products · {len(pat_rows):,} patents/exclusivities · "
                                 f"{len(ndc_rows):,} NDC · {len(sh_rows):,} shortages")
 
