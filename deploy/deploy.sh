@@ -6,6 +6,10 @@ HOST=${PHARMALENS_HOST:-azureuser@srv1}   # over Tailscale: not limited by the h
 KEY=${PHARMALENS_KEY:-~/.ssh/azure_srv}
 TMP=${TMPDIR:-/d/pharmacopy/tmp}/deploy
 mkdir -p "$TMP"
+# refuse to ship code that cannot start: compile every backend file and import the app (a syntax error once put the
+# server into a restart loop)
+(cd backend && py -3 -m compileall -q pharmalens >/dev/null && py -3 -c "import pharmalens.api.main, pharmalens.bot.telegram, pharmalens.connectors") \
+  || { echo "deploy aborted: backend does not compile or import"; exit 1; }
 (cd web && npm run build >/dev/null)
 git archive --format=tar --prefix=app/ HEAD -o "$TMP/app.tar"
 tar -rf "$TMP/app.tar" --transform 's,^web,app/web,' web/dist
