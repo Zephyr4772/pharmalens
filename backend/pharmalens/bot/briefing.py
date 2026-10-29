@@ -13,12 +13,15 @@ from . import llm
 
 log = logging.getLogger("drugden.briefing")
 SEV_W = {"critical": 6, "high": 4, "medium": 2, "info": 1}
-KIND_W = {"spurious": 3, "ban": 3, "recall": 2, "usfda": 2, "shortage": 2, "price_notification": 2, "nsq": 1, "launch": 1,
-          "approval": 1, "filing": 1, "gazette": 1, "tender": 0}
+KIND_W = {"spurious": 3, "ban": 3, "results": 3, "recall": 2, "usfda": 2, "shortage": 2, "price_notification": 2, "trial": 2,
+          "nsq": 1, "launch": 1, "approval": 1, "filing": 1, "results_due": 1, "gazette": 1, "tender": 0}
 NEWS_TOPICS = ("regulatory", "pricing", "quality", "recall", "deal", "approval", "policy", "supply", "litigation")
 
-STYLE = """You write DrugDen's {label} for its owner on Telegram: a sharp analyst's brief on the Indian pharma market
-and the data pipeline. Use ONLY the facts in the JSON. Never invent numbers, names or causes.
+STYLE = """You write DrugDen's {label} for its owner on Telegram: a sharp equity / industry analyst's brief on the
+Indian pharma market and the data pipeline, read on a phone between meetings. Think like an investor: results and
+margins, regulatory risk (US FDA, CDSCO quality failures, bans), governance red flags (regulatory orders, litigation,
+senior exits), pipeline (approvals, trials stopped or advanced), pricing actions. Use ONLY the facts in the JSON.
+Never invent numbers, names or causes.
 
 Format (plain text, phone-sized):
 **{label}**: one-line headline summing up the period.

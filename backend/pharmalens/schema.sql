@@ -234,6 +234,41 @@ CREATE TABLE IF NOT EXISTS mfr_prices (   -- manufacturers' statutory price list
     fetched_at    TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS fin_results (   -- quarterly results of listed pharma groups (NSE integrated filing), ₹ crore
+    symbol         VARCHAR,
+    parent_id      INTEGER,
+    period_start   DATE,
+    period_end     DATE,
+    consolidated   BOOLEAN,
+    audited        VARCHAR,
+    revenue        DOUBLE,            -- revenue from operations
+    other_income   DOUBLE,
+    total_income   DOUBLE,
+    total_expenses DOUBLE,
+    employee_cost  DOUBLE,
+    finance_costs  DOUBLE,
+    depreciation   DOUBLE,
+    pbt            DOUBLE,            -- profit before tax
+    tax            DOUBLE,
+    net_profit     DOUBLE,            -- total profit for the period
+    profit_owners  DOUBLE,            -- attributable to owners of the parent
+    eps            DOUBLE,            -- basic EPS, ₹
+    filed_at       TIMESTAMP,
+    source_url     VARCHAR,
+    fetched_at     TIMESTAMP,
+    PRIMARY KEY (symbol, period_start, period_end, consolidated)
+);
+
+CREATE TABLE IF NOT EXISTS results_calendar (   -- board meetings announced to NSE (results dates)
+    symbol       VARCHAR,
+    parent_id    INTEGER,
+    meeting_date DATE,
+    purpose      VARCHAR,
+    description  VARCHAR,
+    announced_at TIMESTAMP,
+    PRIMARY KEY (symbol, meeting_date, purpose)
+);
+
 CREATE SEQUENCE IF NOT EXISTS seq_docs START 1;
 CREATE TABLE IF NOT EXISTS reg_documents (   -- regulator notices/circulars/gazette/price orders
     id           BIGINT DEFAULT nextval('seq_docs') PRIMARY KEY,

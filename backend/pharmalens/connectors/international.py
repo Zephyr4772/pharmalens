@@ -223,7 +223,15 @@ class EmaMedicines(Connector):
         self.stats.notes.append(f"holder column: {holder_col}; INN column: {inn_col}; {len(keep)} columns")
 
 
-NSE_TOPICS = [
+NSE_TOPICS = [   # first match wins: the red-flag topics come first
+    ("regulatory_action", r"action\(s\) (?:initiated|taken)|orders? passed|penalt|show[- ]cause|sebi order|adjudicat|"
+                          r"search (?:and|&) seizure|income[- ]tax (?:search|survey|demand)|gst (?:demand|notice)|enforcement directorate"),
+    ("litigation", r"litigation|dispute|arbitrat|insolvency|winding up|writ petition|lawsuit|class action|"
+                   r"patent infringement|court|tribunal"),
+    ("mgmt_exit", r"(?:resignation|cessation) of (?:the )?(?:statutory )?auditors?|"
+                  r"(?:resignation|cessation) of [^.]{0,70}? as [^.]{0,45}?(?:director|cfo|chief|company secretary|"
+                  r"compliance officer|managing|whole[- ]time|senior management|key managerial|ceo)"),
+    ("credit", r"credit rating"),
     ("usfda", r"usfda|u\.s\. fda|us fda|form 483|warning letter|import alert|establishment inspection|eir\b|observations"),
     ("approval", r"approval|approved|launch|anda|tentative|nda\b|cdsco|dcgi"),
     ("results", r"financial results|quarter|q[1-4]\s*fy|earnings|investor|analyst|con\. call|press release.*results"),
@@ -233,6 +241,9 @@ NSE_TOPICS = [
 ]
 
 
+TOPICS_VERSION = "nse_topics|v2"
+
+
 class NseFilings(Connector):
     name = "nse_filings"
     title = "NSE Corporate Announcements (pharma)"
@@ -240,12 +251,30 @@ class NseFilings(Connector):
     schedule = {"trigger": "cron", "hour": "9-18", "minute": 50}
     description = "Corporate filings of every listed pharma group: results, USFDA disclosures, approvals, M&A, plant events."
 
+    def retag(self):
+        """Re-classify stored filings once whenever the topic rules change (in bulk: one UPDATE from a frame)."""
+        import pandas as pd
+        cur = db.cursor()
+        if cur.execute("SELECT 1 FROM connector_state WHERE key = ?", [TOPICS_VERSION]).fetchone():
+            return
+        rows = cur.execute("SELECT seq_id, coalesce(category, '') || ' ' || coalesce(text, '') FROM corp_announcements").fetchall()
+        df = pd.DataFrame([{"seq_id": sid, "topic": next((t for t, rx in NSE_TOPICS if re.search(rx, txt, re.I)), "other")}
+                           for sid, txt in rows])
+        with db.writer() as w:
+            if len(df):
+                w.register("_t", df)
+                w.execute("UPDATE corp_announcements SET topic = _t.topic FROM _t WHERE corp_announcements.seq_id = _t.seq_id")
+                w.unregister("_t")
+            w.execute("INSERT OR REPLACE INTO connector_state VALUES (?, ?)", [TOPICS_VERSION, datetime.now().isoformat()])
+        self.stats.notes.append(f"re-tagged {len(df):,} stored filings")
+
     def run(self):
         import httpx
         s = httpx.Client(headers={"User-Agent": BROWSER_UA, "Accept": "application/json", "Referer": "https://www.nseindia.com/"},
                          timeout=40, follow_redirects=True)
         s.get("https://www.nseindia.com/")
         tick = db.cursor().execute("SELECT id, ticker, name FROM parents WHERE ticker IS NOT NULL").fetchall()
+        self.retag()
         with db.writer() as w:
             for pid, sym, pname in tick:
                 try:
@@ -267,7 +296,8 @@ class NseFilings(Connector):
                     w.execute("INSERT INTO corp_announcements VALUES (?,?,?,?,?,?,?,?, now())",
                               [sid, sym, pid, ts, a.get("desc"), a.get("attchmntText"), a.get("attchmntFile"), topic])
                     self.stats.rows_new += 1
-                    if ts and (datetime.now() - ts).days <= 3 and topic in ("usfda", "approval", "deal", "plant", "results"):
-                        sev = "high" if topic in ("usfda", "plant") else "medium"
+                    if ts and (datetime.now() - ts).days <= 3 and topic in ("usfda", "approval", "deal", "plant", "results",
+                                                                              "regulatory_action", "litigation", "mgmt_exit", "credit"):
+                        sev = "high" if topic in ("usfda", "plant", "regulatory_action", "litigation", "mgmt_exit") else "medium"
                         self.emit(w, kind="filing", severity=sev, ts=ts, title=f"{pname} filing ({topic}): {(a.get('attchmntText') or a.get('desc') or '')[:180]}",
                                   url=a.get("attchmntFile"), entity_type="parent", entity_id=pid, dedupe_key=f"nse|{sid}")

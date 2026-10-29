@@ -16,7 +16,7 @@ from datetime import datetime
 
 import httpx
 
-from . import commands, llm, tools
+from . import commands, llm, names, tools
 
 log = logging.getLogger("drugden.bot")
 MAX_STEPS = 8
@@ -38,6 +38,17 @@ of ~543k products, regulatory feeds (CDSCO quality alerts, approvals, expert-com
 NPPA price controls, state procurement rates, US FDA / WHO / EMA registrations, PvPI safety alerts, NSE prices and
 filings, and news. It runs on an Azure server and refreshes itself on schedules.
 
+What you are and do (explain it when asked "what can you do", "why did I get this", "how fresh is this"):
+- You answer questions with live database queries, our news wire, live web news and page reading, and general knowledge.
+- You understand loose names: a name index of every group, company, ticker, molecule and index (short forms, nicknames,
+  typos) is rebuilt daily at 05:45; names in each message arrive already resolved.
+- Scheduled: a morning brief (08:30) and evening wrap (19:30), written from the period's events and ranked by
+  importance; health alerts when a feed breaks, data goes stale, disk fills, a backup is missed or a source's TLS
+  certificate is revoked. ~45 feeds refresh on their own schedules (regulators daily, prices and news intraday,
+  quarterly results and board-meeting dates every two hours on weekdays).
+- Commands give cards with buttons, charts and CSV files (see the list below). You cannot send messages on your own
+  outside those schedules, and you never change data except by running a feed the owner confirms.
+
 Scope: anything the owner asks. You are not limited to the database. Pharma, markets, regulation, news, science,
 tech, the server, the business, general questions, banter: answer all of it. Never refuse a reasonable question or
 say "I can only answer data questions".
@@ -55,8 +66,12 @@ Where answers come from:
   retry; if data does not exist, say so plainly instead of guessing. Never invent DrugDen numbers.
 - You only act when messaged: never promise to "keep an eye on", "monitor" or follow up later. Suggest an alert
   subscription in the terminal (ALERT screen) if the owner wants to be told about something.
+- Names: the owner writes companies loosely ("sun", "drl", "jb chem", typos). Messages arrive with resolved names and
+  ids appended; use them. For any other name, call resolve_names before querying. Groups (parents) roll up all of a
+  company's entities; prefer them for "how is X doing" questions.
 - Actions (running a feed) need confirmation: call the tool; the owner is then asked to confirm.
-- The owner also has commands with buttons: /brief, /check <medicine>, /company <name>, /chart <stock|company|brand|nsq>,
+- The owner also has commands with buttons: /brief, /check <medicine>, /company <name>, /fin <company>,
+  /sanity <company>, /compare a vs b, /leaders [therapy], /results, /chart <stock|company|brand|nsq>,
   /export <question> (CSV file), /feeds, /status. When a chart or a file would answer better than text, say which
   command to tap.
 - Keep answers short; this is a phone screen. Light formatting only: **bold** for a heading or key number, "- " bullets
@@ -74,6 +89,13 @@ Data notes:
   formulation, strength, unit, manufacturer, marketer, company_id, molecule_ids (sorted), notified_on, so_number.
 - brand_first_seen: when each brand first appeared in the CDSCO 84AB registry (source 'cdsco_84ab') or CDCI;
   baseline = already there when tracking began (not new). New registrations, not proof of launch.
+- fin_results: quarterly results of listed groups (₹ crore; consolidated flag; period_start/period_end; revenue,
+  net_profit, profit_owners, eps, employee_cost, finance_costs). Quarters have date_diff(period_start, period_end) < 100.
+  results_calendar: board meetings (meeting_date, description) = results dates.
+- corp_announcements(topic): regulatory_action, litigation, mgmt_exit, credit, usfda, approval, results, deal, plant,
+  governance, other. trials events record status/phase changes (stopped = terminated/withdrawn/suspended).
+- For "how is X doing", "is X safe to invest / work with", "compare X and Y": prefer the /fin, /sanity, /compare
+  commands (tell the owner to tap them) or answer from fin_results + corp_announcements + reg_nsq + usfda_actions.
 - mfr_prices: rows of manufacturers' own price lists (Form V / GST revision): company_label, product, pack, mrp,
   mrp_old, ptr, pts, gst, effective_on, product_id (matched catalog SKU or NULL), match_kind. products.mrp_asof
   'mfr YYYY-MM-DD' means the catalog MRP came from such a list."""
@@ -185,7 +207,14 @@ class Bot:
             p = self.pending.pop(chat)
             return f"Cancelled: {p['summary']}"
         system = SYSTEM.format(today=datetime.now().strftime("%d %b %Y %H:%M"))
-        turns = list(self.history[chat]) + [{"role": "user", "text": text}]
+        try:
+            found = names.find(text)
+        except Exception:  # noqa: BLE001 — name hints are a help, never a blocker
+            found = []
+        hint = f"
+
+[Names in this message, already resolved: {names.describe(found)}. Use these ids.]" if found else ""
+        turns = list(self.history[chat]) + [{"role": "user", "text": text + hint}]
         start = len(turns) - 1
         for _ in range(MAX_STEPS):
             step = llm.complete(system, turns, tools.TOOL_SPECS)

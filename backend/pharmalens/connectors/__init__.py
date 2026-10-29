@@ -3,6 +3,8 @@ from .cdci import Cdci
 from .catalog_sync import NppaHistory, ParentSync
 from .health import HealthWatch
 from .briefing import Briefing
+from .name_index import NameIndex
+from .financials import NseResults
 from .procurement_safety import FdaImportAlert6640, HmsclRates, PvpiAlerts, RmsclRates, TnmscRates, UpmsclDebarments, WhoAlerts
 from .enrichment import MoleculeEnrichment
 from .cdsco_portal import CdscoApprovalsDb, CdscoBrandRegistry, CdscoNsqPortal
@@ -19,11 +21,11 @@ from .pipeline_feeds import CdscoApprovals, CdscoSec, ClinicalTrialsIndia, Nlem,
 REGISTRY = {c.name: c for c in [
     CdscoNsq, NsqMirror, CdscoBannedFdc, CdscoGazette, CdscoAlerts,
     NppaOrders, NppaRetailPrices, MfrPriceLists, JanAushadhi,
-    NseQuotes, NseFundamentals, NseHistory,
+    NseQuotes, NseFundamentals, NseHistory, NseResults,
     PharmaNews, NewsArchive, OpenFdaIndiaRecalls,
     CdscoApprovals, CdscoSec, Nlem, ClinicalTrialsIndia, NppaCompendium,
     CdscoNsqPortal, CdscoApprovalsDb, CdscoBrandRegistry,
     OpenFdaBulk, WhoPrequal, EmaMedicines, NseFilings, Cdci,
     ParentSync, NppaHistory, PvpiAlerts, RmsclRates, TnmscRates, HmsclRates, UpmsclDebarments, WhoAlerts, FdaImportAlert6640, MoleculeEnrichment,
-    AlertsDispatch, HealthWatch, Briefing,
+    AlertsDispatch, HealthWatch, Briefing, NameIndex,
 ]}

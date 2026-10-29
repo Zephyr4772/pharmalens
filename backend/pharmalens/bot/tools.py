@@ -177,6 +177,16 @@ def fetch_page(url: str) -> dict:
     return {"status": r.status_code, "url": str(r.url), "text": text.strip()[:9000]}
 
 
+def resolve_names(text: str) -> dict:
+    """Which companies, groups, molecules or indices a name (or a whole sentence) refers to, with database ids."""
+    from . import names
+    found = names.find(text)
+    if not found:
+        found = names.resolve(text, limit=5)
+    return _json({"matches": [{k: v for k, v in e.items() if k in ("type", "id", "name", "ticker", "group_id", "score", "matched")}
+                              for e in found]})
+
+
 # ---- actions (confirmation required)
 def run_feed(name: str) -> dict:
     from ..connectors import REGISTRY
@@ -236,6 +246,11 @@ TOOLS = [
     {"name": "fetch_page", "fn": fetch_page,
      "description": "Read the text of a public web page by URL (a link the owner sent, a news story or a source page).",
      "parameters": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]}},
+    {"name": "resolve_names", "fn": resolve_names,
+     "description": "Resolve company / group / molecule / index names as the owner typed them (short forms, tickers, "
+                    "nicknames, typos: 'sun', 'drl', 'glenmrk', 'cadila') to canonical names and database ids. Use it "
+                    "before querying whenever a name is not already resolved in the message context.",
+     "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}},
     {"name": "run_feed", "fn": run_feed,
      "description": "Request running a data feed immediately (asks the owner to confirm first). Use the feed name from feed_status.",
      "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}},

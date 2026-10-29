@@ -104,6 +104,21 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 3. More manufacturer price lists (OCR for scanned ones like Ajanta; seed the ~15 unrecognised companies). Court-stay tracking for bans.
 4. USFDA warning letters (fda.gov blocks curl; import alerts are done via accessdata.fda.gov). More state procurement (KMSCL Kerala, others), WHO DDD values, PvPI signal reports.
 
+## Specs, the Telegram bot (2026-10-29)
+- `bot/telegram.py` long-polls (messages + button taps), routes `/commands` to `bot/commands.py`, everything else to
+  the agent (Gemini 3 flash -> 2.5 flash-lite -> Groq; tools in `bot/tools.py`). `deliver()` sends text with inline
+  buttons, chart PNGs (`bot/charts.py`) and CSV files; scheduled jobs use it too.
+- Name understanding: `bot/names.py` builds `data/name_index.json` (groups, companies, molecules, indices with short
+  forms, tickers, nicknames, initials; fuzzy via rapidfuzz). Rebuilt daily by the `name_index` feed. Each message's
+  names are resolved and appended for the agent; `resolve_names` tool for the rest; commands use `_find_group`.
+- Commands: /brief /check /company /fin /sanity /compare /leaders /results /chart /export /feeds /status.
+- Briefings (`connectors/briefing.py`, 08:30 and 19:30) replace the old 2-hourly pulse; `bot/briefing.py` gathers
+  facts and the model words them (template fallback). Quiet periods send one line.
+- Financial data: `nse_results` feed parses NSE integrated-filing pages into `fin_results` (₹ crore) and board
+  meetings into `results_calendar`; events `results` (YoY change) and `results_due`. Filing topics now include
+  regulatory_action / litigation / mgmt_exit / credit (one-off retag, `nse_topics|v2`). Trial status / phase changes
+  raise `trial` events (stopped = high).
+
 ## Gotchas
 - **TLS.** Every feed verifies certificates (`pharmalens/tls.py`, `tls.CONTEXT`); never add `verify=False`. nppa.gov.in sends an incomplete chain, so Sectigo's DV R36 intermediate is pinned in `pharmalens/certs/` (it only helps reach public roots). If another site fails with 'unable to get local issuer certificate', pin its intermediate the same way (download from the URL in its certificate, check it with `openssl verify` against certifi). Revocation is checked weekly over OCSP by health_watch (errors retried hourly); nppaipdms.gov.in has served a certificate revoked as 'superseded' since 19 Oct 2026 (NPPA's slip, low risk).
 - **Port 8010.** Another local app (node) uses 8000 on this machine.

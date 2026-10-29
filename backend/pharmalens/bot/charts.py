@@ -104,3 +104,30 @@ def product_prices(pid: int) -> bytes | None:
     lo, hi = min(p), max(p)
     ax.set_ylim(lo - (hi - lo or lo) * 0.3, hi + (hi - lo or hi) * 0.3)
     return _png(fig)
+
+
+def fin_quarters(symbol: str, label: str, n: int = 8) -> bytes | None:
+    """Quarterly revenue (bars) and net margin (line), consolidated results from NSE filings."""
+    rows = db.cursor().execute("""SELECT period_end, revenue, net_profit FROM fin_results
+                                  WHERE symbol = ? AND consolidated AND date_diff('day', period_start, period_end) < 100
+                                  AND revenue IS NOT NULL ORDER BY period_end DESC LIMIT ?""", [symbol, n]).fetchall()[::-1]
+    if len(rows) < 2:
+        return None
+    q = [f"{d:%b %y}" for d, _, _ in rows]
+    rev = [r or 0 for _, r, _ in rows]
+    margin = [(p / r * 100) if r and p is not None else None for _, r, p in rows]
+    fig, ax = _fig(f"{label}: quarterly results", f"consolidated · revenue ₹ crore (bars) · net margin % (line) · latest {q[-1]}")
+    x = range(len(q))
+    ax.set_axisbelow(True)
+    ax.bar(x, rev, color=AMBER, width=0.6)
+    for i, v in enumerate(rev):
+        ax.annotate(f"{v:,.0f}", (i, v), textcoords="offset points", xytext=(0, 3), ha="center", color=FG, fontsize=7)
+    ax.set_xticks(list(x), q)
+    ax2 = ax.twinx()
+    ax2.plot(x, margin, color=GREEN, marker="o", linewidth=1.6)
+    ax2.tick_params(colors=GREEN, labelsize=8)
+    for s in ax2.spines.values():
+        s.set_color("#222b35")
+    ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0f}%"))
+    fig.subplots_adjust(right=0.92)   # room for the margin axis on the right
+    return _png(fig)

@@ -514,6 +514,27 @@ class ClinicalTrialsIndia(Connector):
             if not token or self.stats.rows_seen > 20000:
                 break
 
+    STOPPED = {"TERMINATED", "WITHDRAWN", "SUSPENDED"}
+    PHASE_ORDER = ["EARLY_PHASE1", "PHASE1", "PHASE2", "PHASE3", "PHASE4"]
+
+    def _progress(self, w, nct, title, sponsor, pid, before, status, phase, upd):
+        """A trial changed status or phase: stopped trials are the public signal of failure; completion and phase
+        advances are progress. Only for tracked groups' trials and phase 3 studies."""
+        old_status, old_phase = before
+        rank = lambda ph: max((self.PHASE_ORDER.index(x) for x in (ph or "").split(",") if x in self.PHASE_ORDER), default=-1)
+        if status in self.STOPPED and old_status not in self.STOPPED:
+            sev, what = "high", f"Trial stopped ({status.lower()})"
+        elif status == "COMPLETED" and old_status != "COMPLETED":
+            sev, what = "medium", "Trial completed"
+        elif rank(phase) > rank(old_phase):
+            sev, what = "medium", f"Trial moved to {(phase or '').replace('PHASE', 'phase ').replace(',', '/')}"
+        else:
+            return
+        self.emit(w, kind="trial", severity=sev, ts=upd,
+                  title=f"{what}: {title[:140]} — {sponsor}", url=f"https://clinicaltrials.gov/study/{nct}",
+                  entity_type="parent" if pid else None, entity_id=pid, dedupe_key=f"ct|{nct}|{status}|{phase}",
+                  payload={"from": {"status": old_status, "phase": old_phase}, "to": {"status": status, "phase": phase}})
+
     def _upsert(self, w, s: dict, first_load: bool):
         p = s.get("protocolSection", {})
         ident = p.get("identificationModule", {})
@@ -537,8 +558,12 @@ class ClinicalTrialsIndia(Connector):
                     mids.append(m)
         sponsor = spons.get("name")
         pid = matcher.parent_for(sponsor, region="global") or (matcher.parents_in(sponsor or "") or [None])[0]
-        exists = w.execute("SELECT status FROM trials WHERE nct_id = ?", [nct]).fetchone()
+        exists = w.execute("SELECT status, phase FROM trials WHERE nct_id = ?", [nct]).fetchone()
         upd = status.get("lastUpdatePostDateStruct", {}).get("date")
+        new_status = status.get("overallStatus")
+        new_phase = ",".join(design.get("phases", []) or []) or None
+        if exists and not first_load and (pid or "PHASE3" in (new_phase or "")) and (exists[0], exists[1]) != (new_status, new_phase):
+            self._progress(w, nct, ident.get("briefTitle", ""), sponsor, pid, exists, new_status, new_phase, upd)
         w.execute("INSERT OR REPLACE INTO trials VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, now())", [
             nct, ctri, ident.get("briefTitle"), sponsor, spons.get("class"), ",".join(design.get("phases", []) or []) or None,
             status.get("overallStatus"), "; ".join(p.get("conditionsModule", {}).get("conditions", []) or [])[:600],

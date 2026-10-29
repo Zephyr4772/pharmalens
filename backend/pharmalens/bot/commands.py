@@ -46,6 +46,11 @@ COMMANDS = [
     ("brief", "briefing now: what happened and why it matters"),
     ("check", "check a medicine: bans, failed batches, price, cheaper options"),
     ("company", "company snapshot: quality, US FDA, news, share price"),
+    ("fin", "financials: quarterly results, margins, valuation, next results date"),
+    ("sanity", "due-diligence scorecard: quality, regulators, legal, management, financials"),
+    ("compare", "compare companies side by side: /compare sun vs drl"),
+    ("leaders", "who leads each therapy area, and who is launching most"),
+    ("results", "results calendar and latest reported quarters"),
     ("chart", "chart a stock, a company's quality record or a product's prices"),
     ("export", "answer a question as a CSV file"),
     ("feeds", "data feed health, with run buttons"),
@@ -58,7 +63,7 @@ def help_(_: str = "") -> list[Reply]:
     lines = ["**Specs.** I run the pipes. Commands, or just ask me anything:"]
     lines += [f"/{c}: {d}" for c, d in COMMANDS]
     lines.append("\nExamples: `/check dolo 650` · `/company cipla` · `/chart sunpharma` · `/chart nsq` · "
-                 "`/export top 50 companies by NSQ batches in 2026`")
+                 "`/fin drl` · `/sanity alkem` · `/compare sun vs cipla` · `/export top 50 companies by NSQ batches in 2026`")
     return [Reply("\n".join(lines), [[cb("Brief me", "brief"), cb("Feeds", "feeds"), link("Terminal", "/")]])]
 
 
@@ -140,13 +145,13 @@ def cheap(pid: str) -> list[Reply]:
 
 # ------------------------------------------------------------------ /company
 def _find_group(arg: str):
-    cur = db.cursor()
-    q = arg.strip()
-    row = db.one(cur, """SELECT pa.id, pa.slug, pa.name, pa.ticker FROM parents pa
-                         LEFT JOIN (SELECT parent_id, sum(product_count) n FROM companies GROUP BY 1) c ON c.parent_id = pa.id
-                         WHERE upper(pa.ticker) = upper(?) OR pa.name ILIKE ? ORDER BY (upper(pa.ticker) = upper(?)) DESC,
-                         c.n DESC NULLS LAST LIMIT 1""", [q, f"%{q}%", q])
-    return row
+    """The corporate group a name refers to ('sun', 'drl', 'SUNPHARMA', 'glenmrk'); a company resolves to its group."""
+    from . import names
+    for e in names.resolve(arg, types=("group", "company"), limit=3):
+        gid = e["id"] if e["type"] == "group" else e.get("group_id")
+        if gid:
+            return db.one(db.cursor(), "SELECT id, slug, name, ticker FROM parents WHERE id = ?", [gid])
+    return None
 
 
 def company(arg: str) -> list[Reply]:
@@ -180,7 +185,8 @@ def company(arg: str) -> list[Reply]:
         lines.append("Latest news:")
         lines += [f"- {t[:110]} ({s})" for t, s in news]
     row1 = [cb("Quality chart", f"chart:q:{pid}")] + ([cb("Share chart", f"chart:t:{g['ticker']}")] if g["ticker"] else [])
-    return [Reply("\n".join(lines), [row1, [cb("More news", f"news:{pid}"), link("Open in terminal", f"/g/{g['slug']}")]])]
+    row2 = ([cb("Financials", f"fin:{pid}")] if g["ticker"] else []) + [cb("Sanity check", f"sanity:{pid}")]
+    return [Reply("\n".join(lines), [row1, row2, [cb("More news", f"news:{pid}"), link("Open in terminal", f"/g/{g['slug']}")]])]
 
 
 def news_for(pid: str) -> list[Reply]:
@@ -196,8 +202,10 @@ def chart(arg: str) -> list[Reply]:
     a = arg.strip()
     if not a or a.lower() in ("nsq", "quality", "market"):
         return chart_cb("qm")
-    if a.lower() in ("nifty", "nifty pharma", "pharma"):
-        return chart_cb("t:^CNXPHARMA")
+    from . import names
+    idx = [e for e in names.resolve(a, types=("index",), limit=1) if e["score"] == 100]
+    if idx or a.lower() == "pharma":
+        return chart_cb(f"t:{idx[0]['ticker'] if idx else '^CNXPHARMA'}")
     g = _find_group(a)
     if g and g["ticker"]:
         return chart_cb(f"t:{g['ticker']}")
@@ -214,13 +222,16 @@ def chart_cb(arg: str) -> list[Reply]:
     kind, _, val = arg.partition(":")
     if kind == "t":
         name = db.cursor().execute("SELECT name FROM parents WHERE ticker = ?", [val]).fetchone()
-        png = charts.stock(val, name[0] if name else ("NIFTY Pharma" if val == "^CNXPHARMA" else val))
+        png = charts.stock(val, name[0] if name else {"^CNXPHARMA": "NIFTY Pharma", "^NSEI": "NIFTY 50"}.get(val, val))
     elif kind == "q":
         g = db.cursor().execute("SELECT name FROM parents WHERE id = ?", [int(val)]).fetchone()
         ids = [r[0] for r in db.cursor().execute("SELECT id FROM companies WHERE parent_id = ?", [int(val)]).fetchall()]
         png = charts.nsq_monthly(g[0] if g else "Group", ids or [-1])
     elif kind == "qm":
         png = charts.nsq_monthly("India")
+    elif kind == "f":
+        name = db.cursor().execute("SELECT name FROM parents WHERE ticker = ?", [val]).fetchone()
+        png = charts.fin_quarters(val, name[0] if name else val)
     elif kind == "p":
         png = charts.product_prices(int(val))
     else:
@@ -368,11 +379,239 @@ EXPORT_NOTES = ("companies.parent_id -> parents.id; reg_nsq(alert_month 'YYYY-MM
                 "molecule_ids columns are comma lists: list_contains(string_split(molecule_ids, ','), '<id>').")
 
 
+# ------------------------------------------------------------------ financial view
+def _quarters(symbol: str, n: int = 8) -> list[dict]:
+    return db.rows(db.cursor(), """SELECT period_start, period_end, revenue, net_profit, profit_owners, eps, employee_cost, finance_costs,
+                                          filed_at, source_url FROM fin_results
+                                   WHERE symbol = ? AND consolidated AND date_diff('day', period_start, period_end) < 100
+                                   ORDER BY period_end DESC LIMIT ?""", [symbol, n])
+
+
+def _yoy(rows: list[dict], i: int, field: str) -> float | None:
+    """Change against the same quarter a year earlier (matched by date, not position), if we have it."""
+    end = rows[i]["period_end"]
+    prev = next((r for r in rows if 355 <= (end - r["period_end"]).days <= 375), None)
+    a, b = rows[i].get(field), (prev or {}).get(field)
+    if a is None or not b or (b < 0 < a) or (a < 0 < b):
+        return None
+    return (a / b - 1) * 100
+
+
+def qlabel(d) -> str:
+    return f"Q{((d.month - 4) % 12) // 3 + 1} FY{(d.year + (1 if d.month > 3 else 0)) % 100:02d}"
+
+
+def fin(arg: str) -> list[Reply]:
+    g = _find_group(arg) if not str(arg).isdigit() else db.one(db.cursor(), "SELECT id, slug, name, ticker FROM parents WHERE id = ?", [int(arg)])
+    if not g:
+        return [Reply(f"No corporate group matches '{arg}'.")]
+    if not g["ticker"]:
+        return [Reply(f"{g['name']} is not listed, so there are no published quarterly results. Try `/sanity {g['name']}`.")]
+    cur = db.cursor()
+    rows = _quarters(g["ticker"])
+    q = db.one(cur, "SELECT price, change_pct, market_cap, pe, week52_high, week52_low FROM quotes WHERE ticker = ?", [f"{g['ticker']}.NS"])
+    nxt = db.one(cur, """SELECT meeting_date, description FROM results_calendar WHERE symbol = ? AND meeting_date >= current_date
+                         ORDER BY meeting_date LIMIT 1""", [g["ticker"]])
+    lines = [f"**{g['name']}** · NSE {g['ticker']}"]
+    if q and q.get("price"):
+        lines.append(f"₹{q['price']:,.1f} ({(q.get('change_pct') or 0):+.2f}%)" + (f" · m-cap ₹{q['market_cap'] / 1e7:,.0f} Cr" if q.get("market_cap") else "")
+                     + (f" · P/E {q['pe']:.1f}" if q.get("pe") else "")
+                     + (f" · 52w ₹{q['week52_low']:,.0f}–{q['week52_high']:,.0f}" if q.get("week52_high") else ""))
+    if rows:
+        lines.append("Quarterly (consolidated, ₹ cr): revenue · net profit · margin · YoY")
+        for i, r in enumerate(rows[:6]):
+            m = r["net_profit"] / r["revenue"] * 100 if r.get("revenue") and r.get("net_profit") is not None else None
+            ry, py = _yoy(rows, i, "revenue"), _yoy(rows, i, "net_profit")
+            lines.append(f"- {qlabel(r['period_end'])}: {r['revenue']:,.0f} · {(r['net_profit'] or 0):,.0f} · "
+                         + (f"{m:.1f}%" if m is not None else "—")
+                         + (f" · rev {ry:+.0f}%, profit {py:+.0f}%" if ry is not None and py is not None else ""))
+    else:
+        lines.append("No results filed in the integrated format yet.")
+    if nxt:
+        lines.append(f"Next board meeting: {nxt['meeting_date']:%d %b %Y}")
+    return [Reply("\n".join(lines), [[cb("Results chart", f"chart:f:{g['ticker']}"), cb("Sanity check", f"sanity:{g['id']}")],
+                                     [cb("Share chart", f"chart:t:{g['ticker']}"), link("Open in terminal", f"/g/{g['slug']}")]])]
+
+
+def _signal(level: str) -> str:
+    return {"red": "🔴", "amber": "🟠", "green": "🟢", "info": "⚪"}[level]
+
+
+def sanity(arg: str) -> list[Reply]:
+    """A due-diligence scorecard from public records: quality, regulators, legal, governance, financials."""
+    g = _find_group(arg) if not str(arg).isdigit() else db.one(db.cursor(), "SELECT id, slug, name, ticker FROM parents WHERE id = ?", [int(arg)])
+    if not g:
+        return [Reply(f"No corporate group matches '{arg}'.")]
+    cur, pid = db.cursor(), g["id"]
+    y1 = (datetime.now() - timedelta(days=365)).strftime("%Y-%m")
+    y2 = (datetime.now() - timedelta(days=730)).strftime("%Y-%m")
+    nsq_now, nsq_prev, spur = cur.execute("""SELECT count(*) FILTER (WHERE alert_month >= ?), count(*) FILTER (WHERE alert_month >= ? AND alert_month < ?),
+                                                    count(*) FILTER (WHERE alert_month >= ? AND category = 'SPURIOUS')
+                                             FROM reg_nsq n JOIN companies c ON c.id = n.company_id WHERE c.parent_id = ?""",
+                                          [y1, y2, y1, y1, pid]).fetchone()
+    ia, rc, last_ia = cur.execute("""SELECT count(*) FILTER (WHERE kind = 'import_alert' AND issued_on >= current_date - INTERVAL 730 DAY),
+                                            count(*) FILTER (WHERE kind = 'recall' AND issued_on >= current_date - INTERVAL 365 DAY),
+                                            max(issued_on) FILTER (WHERE kind = 'import_alert')
+                                     FROM usfda_actions WHERE parent_id = ?""", [pid]).fetchone()
+    skus, banned, dpco = cur.execute("""SELECT count(*), count(*) FILTER (WHERE p.ban_level = 'exact'),
+                                               count(*) FILTER (WHERE EXISTS (SELECT 1 FROM product_molecules pm JOIN molecules m ON m.id = pm.molecule_id
+                                                                              WHERE pm.product_id = p.id AND m.nppa_ceiling IS NOT NULL))
+                                        FROM products p JOIN companies c ON c.id = p.company_id
+                                        WHERE c.parent_id = ? AND NOT coalesce(p.is_discontinued, false)""", [pid]).fetchone()
+    flags = dict(cur.execute("""SELECT topic, count(*) FROM corp_announcements WHERE parent_id = ? AND announced_at >= now() - INTERVAL 365 DAY
+                                AND topic IN ('regulatory_action', 'litigation', 'mgmt_exit', 'credit') GROUP BY 1""", [pid]).fetchall())
+    cfo_exit = cur.execute("""SELECT count(*) FROM corp_announcements WHERE parent_id = ? AND announced_at >= now() - INTERVAL 365 DAY
+                              AND topic = 'mgmt_exit' AND regexp_matches(lower(text), 'chief financial|cfo|auditor|managing director|ceo|chief executive')""",
+                           [pid]).fetchone()[0]
+    lit_news = cur.execute("""SELECT count(*) FROM news WHERE list_contains(string_split(parent_ids, ','), ?) AND topic = 'litigation'
+                              AND published_at >= now() - INTERVAL 180 DAY""", [str(pid)]).fetchone()[0]
+    lines = [f"**Sanity check: {g['name']}**" + (f" (NSE {g['ticker']})" if g["ticker"] else " (unlisted)")]
+    # quality
+    lvl = "red" if spur or nsq_now >= 10 else "amber" if nsq_now >= 3 else "green"
+    trend = "rising" if nsq_now > nsq_prev else "falling" if nsq_now < nsq_prev else "flat"
+    lines.append(f"{_signal(lvl)} Quality: {nsq_now} failed-batch listings in 12 months ({trend}; {nsq_prev} the year before)"
+                 + (f", {spur} spurious" if spur else ""))
+    # US regulator
+    lvl = "red" if ia else "amber" if rc else "green"
+    lines.append(f"{_signal(lvl)} US FDA: {ia} import alerts in 2 years, {rc} recalls in 12 months"
+                 + (f" (last import alert {last_ia})" if last_ia else ""))
+    # Indian regulator / bans
+    share = banned / skus * 100 if skus else 0
+    lvl = "amber" if share > 1 else "green"
+    lines.append(f"{_signal(lvl)} Banned combinations: {banned} of {skus:,} active SKUs ({share:.1f}%)")
+    # disclosures
+    ra, lit, ex = flags.get("regulatory_action", 0), flags.get("litigation", 0), flags.get("mgmt_exit", 0)
+    if g["ticker"]:
+        lvl = "red" if ra >= 3 else "amber" if ra else "green"
+        lines.append(f"{_signal(lvl)} Regulatory actions / orders disclosed: {ra} in 12 months")
+        lvl = "amber" if lit or lit_news >= 3 else "green"
+        lines.append(f"{_signal(lvl)} Litigation: {lit} disclosures in 12 months, {lit_news} litigation news items in 6 months")
+        lvl = "red" if cfo_exit else "amber" if ex >= 3 else "green"
+        lines.append(f"{_signal(lvl)} Management: {ex} senior exits in 12 months" + (f", incl. {cfo_exit} CEO/CFO/MD/auditor" if cfo_exit else ""))
+        if flags.get("credit"):
+            lines.append(f"{_signal('info')} Credit rating updates: {flags['credit']} in 12 months")
+        rows = _quarters(g["ticker"])
+        if rows:
+            r = rows[0]
+            ry, py = _yoy(rows, 0, "revenue"), _yoy(rows, 0, "net_profit")
+            loss = (r.get("net_profit") or 0) < 0
+            lvl = "red" if loss or (py is not None and py <= -30) else "amber" if (ry is not None and ry < 0) or (py is not None and py < 0) else "green"
+            lines.append(f"{_signal(lvl)} Financials {qlabel(r['period_end'])}: revenue ₹{r['revenue']:,.0f} cr"
+                         + (f" ({ry:+.0f}% YoY)" if ry is not None else "") + f", net profit ₹{(r['net_profit'] or 0):,.0f} cr"
+                         + (f" ({py:+.0f}% YoY)" if py is not None else ""))
+    else:
+        lines.append(f"{_signal('info')} Unlisted: no exchange disclosures or published results to check")
+    lines.append(f"{_signal('info')} Price-control exposure: {dpco / skus * 100 if skus else 0:.0f}% of active SKUs contain an NPPA ceiling-priced molecule")
+    lines.append("_Public records only: absence of a flag is not a clean bill of health._")
+    buttons = [[cb("Quality chart", f"chart:q:{pid}")] + ([cb("Financials", f"fin:{pid}")] if g["ticker"] else []),
+               [cb("Disclosures", f"flags:{pid}"), link("Open in terminal", f"/g/{g['slug']}")]]
+    return [Reply("\n".join(lines), buttons)]
+
+
+def flags_for(pid: str) -> list[Reply]:
+    rows = db.cursor().execute("""SELECT announced_at, topic, text, attachment FROM corp_announcements WHERE parent_id = ?
+                                  AND topic IN ('regulatory_action', 'litigation', 'mgmt_exit', 'credit')
+                                  ORDER BY announced_at DESC LIMIT 12""", [int(pid)]).fetchall()
+    if not rows:
+        return [Reply("No regulatory-action, litigation, management-exit or credit-rating disclosures on file.")]
+    lab = {"regulatory_action": "⚖️ action", "litigation": "⚖️ litigation", "mgmt_exit": "🚪 exit", "credit": "📊 credit"}
+    out = [f"{lab[t]} {d:%d %b %Y}: " + (f"[{x[:150]}]({u})" if u else x[:150]) for d, t, x, u in rows]
+    return [Reply("**Latest disclosures**\n" + "\n".join(out))]
+
+
+def compare(arg: str) -> list[Reply]:
+    parts = [p for p in re.split(r"\s+(?:vs\.?|versus|and|v)\s+|\s*,\s*", arg.strip(), flags=re.I) if p.strip()]
+    if len(parts) < 2:
+        return [Reply("Compare two or more companies: `/compare sun vs drl` or `/compare cipla, lupin, zydus`")]
+    groups = [(p, _find_group(p)) for p in parts[:4]]
+    missing = [p for p, g in groups if not g]
+    if missing:
+        return [Reply(f"Couldn't place: {', '.join(missing)}")]
+    cur = db.cursor()
+    y1 = (datetime.now() - timedelta(days=365)).strftime("%Y-%m")
+    blocks = []
+    for _, g in groups:
+        q = db.one(cur, "SELECT price, market_cap, pe FROM quotes WHERE ticker = ?", [f"{g['ticker']}.NS"]) if g["ticker"] else None
+        h = cur.execute("""SELECT first(close ORDER BY d), last(close ORDER BY d) FROM quote_history
+                           WHERE ticker = ? AND d >= current_date - INTERVAL 365 DAY""", [f"{g['ticker']}.NS"]).fetchone() if g["ticker"] else None
+        rows = _quarters(g["ticker"]) if g["ticker"] else []
+        nsq = cur.execute("""SELECT count(*) FROM reg_nsq n JOIN companies c ON c.id = n.company_id
+                             WHERE c.parent_id = ? AND alert_month >= ?""", [g["id"], y1]).fetchone()[0]
+        skus = cur.execute("""SELECT count(*) FROM products p JOIN companies c ON c.id = p.company_id
+                              WHERE c.parent_id = ? AND NOT coalesce(p.is_discontinued, false)""", [g["id"]]).fetchone()[0]
+        ia = cur.execute("SELECT count(*) FROM usfda_actions WHERE parent_id = ? AND issued_on >= current_date - INTERVAL 730 DAY", [g["id"]]).fetchone()[0]
+        b = [f"**{g['name']}**"]
+        if q and q.get("price"):
+            b.append(f"₹{q['price']:,.0f}" + (f" · 1y {((h[1] / h[0]) - 1) * 100:+.0f}%" if h and h[0] else "")
+                     + (f" · m-cap ₹{q['market_cap'] / 1e7:,.0f} Cr" if q.get("market_cap") else "") + (f" · P/E {q['pe']:.0f}" if q.get("pe") else ""))
+        if rows:
+            r = rows[0]
+            m = r["net_profit"] / r["revenue"] * 100 if r.get("revenue") and r.get("net_profit") is not None else None
+            ry = _yoy(rows, 0, "revenue")
+            b.append(f"{qlabel(r['period_end'])}: rev ₹{r['revenue']:,.0f} cr" + (f" ({ry:+.0f}%)" if ry is not None else "")
+                     + (f", margin {m:.0f}%" if m is not None else ""))
+        b.append(f"{skus:,} active SKUs · {nsq} failed batches (12m) · {ia} US FDA actions (2y)")
+        blocks.append("\n".join(b))
+    return [Reply("\n\n".join(blocks), [[cb(f"Sanity: {g['name'][:18]}", f"sanity:{g['id']}") for _, g in groups[:2]]])]
+
+
+def leaders(arg: str) -> list[Reply]:
+    """Who leads each therapy area (estimated value share), and who is launching most right now."""
+    cur = db.cursor()
+    a = arg.strip()
+    if a:
+        seg = cur.execute("SELECT DISTINCT segment FROM segment_share WHERE segment_type = 'class' AND segment ILIKE ? LIMIT 1", [f"%{a}%"]).fetchone()
+        if not seg:
+            return [Reply(f"No therapy class like '{a}'. Try: cardiac, anti diabetic, anti infectives, neuro, respiratory.")]
+        rows = cur.execute("""SELECT pa.name, s.value_share, s.skus FROM segment_share s JOIN parents pa ON pa.id = s.owner_id
+                              WHERE s.segment_type = 'class' AND s.segment = ? AND s.owner_type = 'parent' ORDER BY s.rank LIMIT 8""", [seg[0]]).fetchall()
+        lines = [f"**{seg[0].title()}**: leaders by estimated value share"] + [f"{i}. {n} · {v * 100:.1f}% · {k:,} SKUs" for i, (n, v, k) in enumerate(rows, 1)]
+        return [Reply("\n".join(lines) + "\n_Estimates from the catalog, not audited sales._")]
+    top = cur.execute("""SELECT s.segment, pa.name, s.value_share FROM segment_share s JOIN parents pa ON pa.id = s.owner_id
+                         WHERE s.segment_type = 'class' AND s.owner_type = 'parent' AND s.rank = 1
+                         ORDER BY (SELECT skus FROM segment_stats st WHERE st.segment_type = 'class' AND st.segment = s.segment) DESC LIMIT 10""").fetchall()
+    launches = cur.execute("""SELECT pa.name, count(*) FROM nppa_retail_prices n JOIN companies c ON c.id = n.company_id JOIN parents pa ON pa.id = c.parent_id
+                              WHERE n.notified_on >= current_date - INTERVAL 365 DAY GROUP BY 1 ORDER BY 2 DESC LIMIT 6""").fetchall()
+    brands = cur.execute("""SELECT pa.name, count(*) FROM brand_first_seen b JOIN companies c ON c.id = b.company_id JOIN parents pa ON pa.id = c.parent_id
+                            WHERE NOT b.baseline AND b.first_seen >= current_date - INTERVAL 180 DAY GROUP BY 1 ORDER BY 2 DESC LIMIT 6""").fetchall()
+    sec = cur.execute("""SELECT pa.name, count(*) FROM sec_items s JOIN parents pa ON pa.id = s.parent_id
+                         WHERE s.outcome = 'recommended' AND s.meeting_date >= current_date - INTERVAL 365 DAY GROUP BY 1 ORDER BY 2 DESC LIMIT 6""").fetchall()
+    lines = ["**Therapy leaders** (estimated value share)"] + [f"- {s.title()}: {n} {v * 100:.1f}%" for s, n, v in top]
+    if launches:
+        lines += ["", "**Most new-drug launch prices from NPPA, 12 months**"] + [f"- {n}: {k}" for n, k in launches]
+    if sec:
+        lines += ["", "**Most SEC recommendations, 12 months**"] + [f"- {n}: {k}" for n, k in sec]
+    if brands:
+        lines += ["", "**Most new brand registrations, 6 months**"] + [f"- {n}: {k}" for n, k in brands]
+    lines.append("_Shares are catalog estimates; launches, SEC and registrations are regulator records._")
+    return [Reply("\n".join(lines))]
+
+
+def results(_: str = "") -> list[Reply]:
+    cur = db.cursor()
+    # one line per day, each company once (NSE lists an intimation and an outcome per meeting)
+    upcoming = cur.execute("""SELECT r.meeting_date, string_agg(DISTINCT pa.name, ', ' ORDER BY pa.name) FROM results_calendar r
+                              JOIN parents pa ON pa.id = r.parent_id
+                              WHERE r.meeting_date BETWEEN current_date AND current_date + INTERVAL 21 DAY
+                              AND regexp_matches(lower(r.description), 'result') GROUP BY 1 ORDER BY 1""").fetchall()
+    recent = cur.execute("""SELECT f.filed_at, pa.name, f.symbol, f.period_end, f.revenue, f.net_profit FROM fin_results f
+                            JOIN parents pa ON pa.id = f.parent_id
+                            WHERE f.consolidated AND f.filed_at >= now() - INTERVAL 14 DAY AND date_diff('day', f.period_start, f.period_end) < 100
+                            ORDER BY f.filed_at DESC LIMIT 12""").fetchall()
+    lines = ["**Results calendar** (next 3 weeks)"] + ([f"- {d:%a %d %b}: {n}" for d, n in upcoming] or ["- none announced yet"])
+    if recent:
+        lines += ["", "**Reported in the last 2 weeks** (consolidated, ₹ cr)"]
+        lines += [f"- {n} {qlabel(pe)}: rev {rv:,.0f}, profit {(npf or 0):,.0f}" for _, n, s, pe, rv, npf in recent]
+    return [Reply("\n".join(lines))]
+
+
 # ------------------------------------------------------------------ routing
 HANDLERS = {"help": help_, "start": help_, "brief": brief, "check": check, "company": company, "chart": chart,
-            "export": export, "feeds": feeds, "status": status}
+            "export": export, "feeds": feeds, "status": status, "fin": fin, "sanity": sanity, "compare": compare,
+            "leaders": leaders, "results": results}
 CALLBACKS = {"brief": lambda a: brief(a), "check": lambda a: product_card(int(a)), "cheap": cheap, "chart": chart_cb,
              "news": news_for, "feeds": feeds, "run": run_ask, "runyes": run_yes, "events": events,
+             "fin": fin, "sanity": sanity, "flags": flags_for,
              "noop": lambda a: [Reply("Fine. Nothing touched.")]}
 
 
