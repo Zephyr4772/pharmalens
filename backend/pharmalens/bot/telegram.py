@@ -16,7 +16,7 @@ from datetime import datetime
 
 import httpx
 
-from . import llm, tools
+from . import commands, llm, tools
 
 log = logging.getLogger("drugden.bot")
 MAX_STEPS = 8
@@ -56,6 +56,9 @@ Where answers come from:
 - You only act when messaged: never promise to "keep an eye on", "monitor" or follow up later. Suggest an alert
   subscription in the terminal (ALERT screen) if the owner wants to be told about something.
 - Actions (running a feed) need confirmation: call the tool; the owner is then asked to confirm.
+- The owner also has commands with buttons: /brief, /check <medicine>, /company <name>, /chart <stock|company|brand|nsq>,
+  /export <question> (CSV file), /feeds, /status. When a chart or a file would answer better than text, say which
+  command to tap.
 - Keep answers short; this is a phone screen. Light formatting only: **bold** for a heading or key number, "- " bullets
   for lists, `backticks` for ids or table names. Never use tables (they render as junk) or # headings.
 - Today is {today}. Times are IST.
@@ -113,6 +116,48 @@ def to_html(md: str) -> str:
     return re.sub(r"\x00(\d+)\x00", lambda m: blocks[int(m.group(1))], s)
 
 
+def _api(method: str, files: dict | None = None, **params) -> dict:
+    url = f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/{method}"
+    if files:   # photos and documents go as multipart; nested fields are JSON-encoded form values
+        data = {k: (json.dumps(v) if isinstance(v, (dict, list)) else v) for k, v in params.items() if v is not None}
+        return httpx.post(url, data=data, files=files, timeout=120).json()
+    return httpx.post(url, json=params, timeout=70).json()
+
+
+def _markup(buttons: list[list[tuple[str, str]]]) -> dict | None:
+    if not buttons:
+        return None
+    rows = [[{"text": label, "url": target[4:]} if target.startswith("url:") else {"text": label, "callback_data": target[3:]}
+             for label, target in row] for row in buttons]
+    return {"inline_keyboard": rows}
+
+
+def deliver(chat: str, replies: list) -> None:
+    """Send command replies (text with buttons, chart photos, CSV files). Used by the bot and by scheduled briefings."""
+    for r in replies:
+        markup = _markup(r.buttons)
+        if r.photo:
+            cap = to_html(r.text[:900]) if r.text else None
+            res = _api("sendPhoto", files={"photo": ("chart.png", r.photo, "image/png")}, chat_id=chat, caption=cap,
+                       parse_mode="HTML" if cap else None, reply_markup=markup)
+            if res.get("ok"):
+                continue
+        if r.document:
+            name, body = r.document
+            cap = to_html(r.text[:900]) if r.text else None
+            res = _api("sendDocument", files={"document": (name, body, "text/csv")}, chat_id=chat, caption=cap,
+                       parse_mode="HTML" if cap else None, reply_markup=markup)
+            if res.get("ok"):
+                continue
+        parts = chunks((r.text or "").strip() or "(nothing to show)")
+        for i, part in enumerate(parts):
+            last = i == len(parts) - 1
+            res = _api("sendMessage", chat_id=chat, text=to_html(part), parse_mode="HTML", disable_web_page_preview=True,
+                       reply_markup=markup if last else None)
+            if not res.get("ok"):  # malformed markup must never swallow an answer: fall back to plain text
+                _api("sendMessage", chat_id=chat, text=part, disable_web_page_preview=True, reply_markup=markup if last else None)
+
+
 class Bot:
     def __init__(self):
         self.token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -123,14 +168,10 @@ class Bot:
         self.offset = None
 
     def api(self, method: str, **params):
-        r = httpx.post(f"https://api.telegram.org/bot{self.token}/{method}", json=params, timeout=70)
-        return r.json()
+        return _api(method, **params)
 
-    def send(self, chat: str, text: str):
-        for part in chunks(text.strip() or "(no answer)"):
-            r = self.api("sendMessage", chat_id=chat, text=to_html(part), parse_mode="HTML", disable_web_page_preview=True)
-            if not r.get("ok"):  # malformed markup must never swallow an answer: fall back to plain text
-                self.api("sendMessage", chat_id=chat, text=part, disable_web_page_preview=True)
+    def send(self, chat: str, text: str, buttons=None):
+        deliver(chat, [commands.Reply(text, buttons or [])])
 
     def answer(self, chat: str, text: str) -> str:
         if chat in self.pending and text.strip().lower() in ("yes", "y", "confirm", "ok", "go", "do it"):
@@ -159,46 +200,68 @@ class Bot:
                 turns.append({"role": "tool", "id": c["id"], "name": c["name"], "result": res})
         final = turns[-1].get("text") if turns[-1]["role"] == "assistant" else ""
         if chat in self.pending:
-            final = (final + "\n\n" if final else "") + f"Confirm: {self.pending[chat]['summary']}? Reply yes or no."
+            final = (final + "\n\n" if final else "") + f"Confirm: {self.pending[chat]['summary']}? Tap a button, or reply yes / no."
         # keep only user text and final answers in memory (tool chatter is re-derived on demand)
         self.history[chat].append(turns[start])
         self.history[chat].append({"role": "assistant", "text": final or "(no answer)"})
         return final or "I couldn't produce an answer; try rephrasing."
 
     def handle(self, upd: dict):
+        if upd.get("callback_query"):
+            return self.handle_button(upd["callback_query"])
         msg = upd.get("message") or {}
         chat = str((msg.get("chat") or {}).get("id") or "")
-        text = msg.get("text") or ""
+        text = (msg.get("text") or "").strip()
         if not chat or not text:
             return
         if chat not in self.allowed:
             log.info("refused chat %s (%s)", chat, (msg.get("from") or {}).get("username"))
             self.send(chat, "Don't know you. This line's private. Logged your chat id, by the way.")
             return
-        if text.strip() in ("/start", "/help"):
-            self.send(chat, "**Specs.** Yeah, I run the pipes here.\n"
-                            "Ask about the data, how fresh it is, sources, any drug or company. I can kick off a feed too, "
-                            "but I'll make you confirm. I don't do surprises.\n"
-                            "/reset wipes our chat. Not the logs. Never the logs.")
-            return
-        if text.strip() == "/reset":
+        if text == "/reset":
             self.history.pop(chat, None)
             self.pending.pop(chat, None)
-            self.send(chat, "Conversation cleared.")
+            self.send(chat, "Conversation cleared. Not the logs. Never the logs.")
             return
+        m = re.fullmatch(r"/(\w+)(?:@\w+)?\s*(.*)", text, re.S)
         self.api("sendChatAction", chat_id=chat, action="typing")
         try:
+            replies = commands.command(m.group(1).lower(), m.group(2)) if m else None
+            if replies is not None:
+                deliver(chat, replies)
+                return
             reply = self.answer(chat, text)
+            buttons = [[commands.cb("Yes", "act:yes"), commands.cb("No", "act:no")]] if chat in self.pending else []
+            self.send(chat, reply, buttons)
         except Exception as e:  # noqa: BLE001
             log.exception("bot answer failed")
-            reply = f"Sorry, that failed: {str(e)[:300]}"
-        self.send(chat, reply)
+            self.send(chat, f"Sorry, that failed: {str(e)[:300]}")
+
+    def handle_button(self, q: dict):
+        chat = str(((q.get("message") or {}).get("chat") or {}).get("id") or "")
+        self.api("answerCallbackQuery", callback_query_id=q["id"])
+        if chat not in self.allowed:
+            return
+        data = q.get("data") or ""
+        try:
+            if data.startswith("act:"):   # confirmation of an action the agent proposed
+                self.send(chat, self.answer(chat, "yes" if data == "act:yes" else "no"))
+                return
+            self.api("sendChatAction", chat_id=chat, action="upload_photo" if data.startswith("chart:") else "typing")
+            deliver(chat, commands.callback(data))
+        except Exception as e:  # noqa: BLE001
+            log.exception("button %s failed", data)
+            self.send(chat, f"That button failed: {str(e)[:300]}")
 
     def loop(self):
         log.info("DrugDen bot polling (allowed chats: %s)", ",".join(self.allowed) or "none")
+        try:   # the menu Telegram shows when the user types "/"
+            self.api("setMyCommands", commands=[{"command": c, "description": d[:256]} for c, d in commands.COMMANDS])
+        except Exception as e:  # noqa: BLE001
+            log.warning("setMyCommands failed: %s", e)
         while True:
             try:
-                r = self.api("getUpdates", timeout=50, offset=self.offset, allowed_updates=["message"])
+                r = self.api("getUpdates", timeout=50, offset=self.offset, allowed_updates=["message", "callback_query"])
                 for upd in r.get("result", []):
                     self.offset = upd["update_id"] + 1
                     threading.Thread(target=self.handle, args=(upd,), daemon=True).start()

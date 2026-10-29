@@ -392,6 +392,8 @@ def build():
                     break
         if p["dosage_form"]:
             p["dosage_form"] = p["dosage_form"].strip().title()
+        if re.match(r"lorem", p["name_norm"] or "") or re.match(r"loremchem", (p["manufacturer_raw"] or "").lower()):
+            p["is_discontinued"] = True     # 1mg's test entries leaked into the public scrapes
         q, _ = pack_quantity(p["pack_size"])
         p["pack_qty"] = q
         p["unit_price"] = round(p["mrp"] / q, 4) if (p["mrp"] and q) else None

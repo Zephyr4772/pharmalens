@@ -198,6 +198,9 @@ def refresh_bans(cur):
 
 
 MIGRATIONS = [
+    # 1mg test entries ("Loremchem Pharmaceutical", "Loremdolo"...) leaked into the public scrapes: never real products
+    "UPDATE products SET is_discontinued = true WHERE (name ILIKE 'lorem%' OR manufacturer_raw ILIKE 'loremchem%') "
+    "AND NOT coalesce(is_discontinued, false)",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS ban_level VARCHAR",
     "ALTER TABLE products ADD COLUMN IF NOT EXISTS ban_id BIGINT",
     "ALTER TABLE combos ADD COLUMN IF NOT EXISTS banned_skus INTEGER",

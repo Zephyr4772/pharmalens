@@ -97,7 +97,8 @@ def search(q: str = Query(..., min_length=2), limit: int = Query(8, le=30)):
     out["products"] = db.rows(cur, f"""
         SELECT p.id, p.name, p.mrp, p.dosage_form, c.name company, p.composition
         FROM products p LEFT JOIN companies c ON c.id = p.company_id
-        WHERE p.name_norm LIKE ? ORDER BY (p.name_norm LIKE ?) DESC, p.source_count DESC, length(p.name) LIMIT ?""",
+        WHERE p.name_norm LIKE ? AND p.name_norm NOT LIKE 'lorem%'
+        ORDER BY (p.name_norm LIKE ?) DESC, p.source_count DESC, length(p.name) LIMIT ?""",
         [like, pre, limit])
     out["molecules"] = db.rows(cur, """
         SELECT id, name, product_count, therapeutic_class FROM molecules

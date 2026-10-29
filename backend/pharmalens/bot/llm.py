@@ -37,9 +37,9 @@ def _gemini(system: str, turns: list[dict], tools: list[dict], model: str) -> di
                                   [{"functionCall": {"name": c["name"], "args": c["args"]}} for c in t.get("calls", [])]})
         elif t["role"] == "tool":
             contents.append({"role": "user", "parts": [{"functionResponse": {"name": t["name"], "response": {"result": t["result"]}}}]})
-    body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents,
-            "tools": [{"functionDeclarations": [{"name": x["name"], "description": x["description"], "parameters": x["parameters"]} for x in tools]}],
-            "generationConfig": {"temperature": 0.2}}
+    body = {"systemInstruction": {"parts": [{"text": system}]}, "contents": contents, "generationConfig": {"temperature": 0.2}}
+    if tools:   # a plain writing task (briefings) sends no tools: Gemini rejects an empty declaration list
+        body["tools"] = [{"functionDeclarations": [{"name": x["name"], "description": x["description"], "parameters": x["parameters"]} for x in tools]}]
     r = httpx.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                    params={"key": key}, json=body, timeout=90)
     if r.status_code != 200:
@@ -71,8 +71,9 @@ def _groq(system: str, turns: list[dict], tools: list[dict]) -> dict:
             msgs.append(m)
         elif t["role"] == "tool":
             msgs.append({"role": "tool", "tool_call_id": t["id"], "content": json.dumps(t["result"], default=str)[:20000]})
-    body = {"model": GROQ_MODEL, "messages": msgs, "temperature": 0.2,
-            "tools": [{"type": "function", "function": {"name": x["name"], "description": x["description"], "parameters": x["parameters"]}} for x in tools]}
+    body = {"model": GROQ_MODEL, "messages": msgs, "temperature": 0.2}
+    if tools:
+        body["tools"] = [{"type": "function", "function": {"name": x["name"], "description": x["description"], "parameters": x["parameters"]}} for x in tools]
     for attempt in range(3):
         r = httpx.post("https://api.groq.com/openai/v1/chat/completions", headers={"Authorization": f"Bearer {key}"}, json=body, timeout=90)
         if r.status_code != 429:
