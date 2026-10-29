@@ -211,9 +211,7 @@ class Bot:
             found = names.find(text)
         except Exception:  # noqa: BLE001 — name hints are a help, never a blocker
             found = []
-        hint = f"
-
-[Names in this message, already resolved: {names.describe(found)}. Use these ids.]" if found else ""
+        hint = ("\n\n[Names in this message, already resolved: " + names.describe(found) + ". Use these ids.]") if found else ""
         turns = list(self.history[chat]) + [{"role": "user", "text": text + hint}]
         start = len(turns) - 1
         for _ in range(MAX_STEPS):
