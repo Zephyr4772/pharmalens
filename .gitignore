@@ -7,3 +7,5 @@ node_modules/
 web/dist/
 *.tsbuildinfo
 .venv/
+
+/data/derived/

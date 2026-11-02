@@ -194,6 +194,15 @@ export default function ProductDetail() {
           {d.mfr_price && <MfrPrice m={d.mfr_price} />}
           <Panel title="Price record">
             <table className="tt"><tbody>{d.price_history.map((h: Row, i: number) => <tr key={i}><td>{day(h.observed_on)}</td><td className="num amb">{inr(h.mrp)}</td><td className="mut">{h.source}</td></tr>)}</tbody></table>
+            {d.unit_prices?.length > 0 && <>
+              <div className="section-title" style={{ marginTop: 8 }}>Per unit, by the pack each price was quoted for</div>
+              <table className="tt"><tbody>{d.unit_prices.map((u: Row, i: number) => (
+                <tr key={i} title={u.note || `${u.method} · confidence ${u.confidence}`} style={u.comparable ? undefined : { opacity: 0.55 }}>
+                  <td>{day(u.observed_on)}</td><td className="num amb">{u.unit_price != null ? `₹${u.unit_price.toFixed(2)}` : "—"}</td>
+                  <td className="faint">{u.pack_text ?? "pack unknown"}</td>
+                  <td>{u.comparable ? <span className="faint">comparable</span> : <span className="badge b-mute">{u.inferred ? "PACK ASSUMED" : "NOT COMPARABLE"}</span>}</td>
+                </tr>))}</tbody></table>
+            </>}
             {d.nppa_ceiling.length > 0 && <>
               <div className="section-title" style={{ marginTop: 8 }}>NPPA ceiling (per unit)</div>
               <table className="tt"><tbody>{d.nppa_ceiling.slice(0, 6).map((c: Row, i: number) => <tr key={i}><td className="mut">{c.molecule_name} {c.form_strength}</td><td className="num amb">{inr(c.ceiling_price)}</td><td className="faint">{c.unit}</td></tr>)}</tbody></table>

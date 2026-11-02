@@ -7,7 +7,7 @@ import logging
 
 log = logging.getLogger("pharmalens.linking")
 
-ITEMS = ["molecules", "global_status", "events"]       # grows as Phase 1 items land (each its own commit)
+ITEMS = ["molecules", "global_status", "events", "prices"]       # grows as Phase 1 items land (each its own commit)
 
 
 def run(names: list[str] | None = None) -> list[dict]:

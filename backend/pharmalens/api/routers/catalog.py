@@ -246,6 +246,9 @@ def product(pid: int):
                 info[k] = json.loads(info[k])
     p["label"] = info
     p["price_history"] = db.rows(cur, "SELECT observed_on, mrp, source FROM price_observations WHERE product_id = ? ORDER BY observed_on", [pid])
+    # the same points per unit, with the pack each MRP was quoted for (Phase 1 #11); comparable = safe on one trend
+    p["unit_prices"] = maybe(cur, """SELECT observed_on, source, mrp, pack_text, pack_qty, pack_basis, unit_price, comparable, method,
+                                            confidence, note, confidence < 0.85 AS inferred FROM price_unit_obs WHERE product_id = ? ORDER BY observed_on""", [pid])
     # the manufacturer's own price list entry (Form V): MRP with trade prices, newest first
     p["mfr_price"] = (maybe(cur, """
         SELECT effective_on, company_label, product AS list_name, pack, mrp, mrp_old, ptr, pts, gst, match_kind, pack_mrp,
