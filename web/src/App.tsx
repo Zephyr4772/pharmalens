@@ -10,6 +10,8 @@ import { CommandPalette } from "./components/CommandPalette";
 import { connectStream } from "./state/live";
 import { useWatchlist } from "./state/watchlist";
 
+import Today from "./screens/Today";
+import Companies from "./screens/Companies";
 import Market from "./screens/Market";
 import Regulatory from "./screens/Regulatory";
 import Shelf from "./screens/Shelf";
@@ -58,6 +60,7 @@ function Shell() {
       () => {
         qc.invalidateQueries({ queryKey: ["events"] });
         qc.invalidateQueries({ queryKey: ["overview"] });
+        qc.invalidateQueries({ queryKey: ["today"] });
         qc.invalidateQueries({ queryKey: ["alert-inbox"] });
         qc.invalidateQueries({ queryKey: ["alert-unread"] });
       }
@@ -72,7 +75,9 @@ function Shell() {
         <NavRail />
         <main className="screen">
           <Routes>
-            <Route path="/" element={<Market />} />
+            <Route path="/" element={<Today />} />
+            <Route path="/companies" element={<Companies />} />
+            <Route path="/market" element={<Market />} />
             <Route path="/reg" element={<Regulatory />} />
             <Route path="/shelf" element={<Shelf />} />
             <Route path="/screener" element={<Screener />} />
@@ -90,7 +95,7 @@ function Shell() {
             <Route path="/watch" element={<Watchlist />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/alerts" element={<Alerts />} />
-            <Route path="*" element={<Market />} />
+            <Route path="*" element={<Today />} />
           </Routes>
         </main>
       </div>

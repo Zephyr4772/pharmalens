@@ -227,7 +227,7 @@ NSE_TOPICS = [   # first match wins: the red-flag topics come first
     ("regulatory_action", r"action\(s\) (?:initiated|taken)|orders? passed|penalt|show[- ]cause|sebi order|adjudicat|"
                           r"search (?:and|&) seizure|income[- ]tax (?:search|survey|demand)|gst (?:demand|notice)|enforcement directorate"),
     ("litigation", r"litigation|dispute|arbitrat|insolvency|winding up|writ petition|lawsuit|class action|"
-                   r"patent infringement|court|tribunal"),
+                   r"patent infringement|court(?![- ]convened)|tribunal"),   # court-convened meetings are merger votes
     ("mgmt_exit", r"(?:resignation|cessation) of (?:the )?(?:statutory )?auditors?|"
                   r"(?:resignation|cessation) of [^.]{0,70}? as [^.]{0,45}?(?:director|cfo|chief|company secretary|"
                   r"compliance officer|managing|whole[- ]time|senior management|key managerial|ceo)"),
@@ -241,7 +241,7 @@ NSE_TOPICS = [   # first match wins: the red-flag topics come first
 ]
 
 
-TOPICS_VERSION = "nse_topics|v2"
+TOPICS_VERSION = "nse_topics|v3"
 
 
 class NseFilings(Connector):

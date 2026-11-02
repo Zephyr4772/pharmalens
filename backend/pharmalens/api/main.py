@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from .. import db, scheduler
 from ..config import WEB_DIST
-from .routers import alerts, catalog, live, market, pipeline, regulatory, shelf, watchlist
+from .routers import alerts, catalog, invest, live, market, pipeline, regulatory, shelf, watchlist
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
@@ -75,7 +75,7 @@ def db_unavailable(request: Request, exc: db.DatabaseUnavailable):
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
-for r in (catalog, market, regulatory, pipeline, live, shelf, alerts, watchlist):
+for r in (catalog, market, regulatory, pipeline, live, shelf, alerts, watchlist, invest):
     app.include_router(r.router, prefix="/api/v1")
 
 

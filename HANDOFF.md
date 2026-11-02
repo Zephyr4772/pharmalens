@@ -104,6 +104,17 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 3. More manufacturer price lists (OCR for scanned ones like Ajanta; seed the ~15 unrecognised companies). Court-stay tracking for bans.
 4. USFDA warning letters (fda.gov blocks curl; import alerts are done via accessdata.fda.gov). More state procurement (KMSCL Kerala, others), WHO DDD values, PvPI signal reports.
 
+## Investor-first terminal (2026-11-02, see docs/product-strategy.md)
+- Primary user: investors / equity analysts. Build order: watchlist (done) -> Today + Companies (done) -> dossier
+  tabs (Financials, Risk, Pipeline) -> Specs results-day previews + weekly digest -> Signals / Calendar screens.
+- Watchlist: `watchlist` table per Tailscale login (`watchlist.py`, `/api/v1/watchlist`), shared by terminal stars,
+  Specs /watch /unwatch /watchlist, and the owner's "Specs: watchlist" alert subscription (Telegram).
+- `api/routers/invest.py`: `/invest/today` (watchlist rows, ranked 7-day signals, results week, just reported,
+  movers) and `/invest/companies` (one row per listed group: price, 1Y, P/E from trailing-4-quarter EPS, latest
+  quarter YoY + margin, NSQ trend, US FDA, DPCO share, governance flags with /sanity thresholds; cached 5 min; CSV).
+- Terminal: `/` is now Today (key 1), `/companies` the screener (2); the old home moved to `/market` (3). Rail keys
+  were renumbered (NEWS n, SHELF s, FEED f).
+
 ## Specs, the Telegram bot (2026-10-29)
 - `bot/telegram.py` long-polls (messages + button taps), routes `/commands` to `bot/commands.py`, everything else to
   the agent (Gemini 3 flash -> 2.5 flash-lite -> Groq; tools in `bot/tools.py`). `deliver()` sends text with inline
@@ -116,7 +127,7 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
   facts and the model words them (template fallback). Quiet periods send one line.
 - Financial data: `nse_results` feed parses NSE integrated-filing pages into `fin_results` (₹ crore) and board
   meetings into `results_calendar`; events `results` (YoY change) and `results_due`. Filing topics now include
-  regulatory_action / litigation / mgmt_exit / credit (one-off retag, `nse_topics|v2`). Trial status / phase changes
+  regulatory_action / litigation / mgmt_exit / credit (one-off retag on rule change, now `nse_topics|v3`: court-convened merger meetings are no longer litigation). Trial status / phase changes
   raise `trial` events (stopped = high).
 
 ## Gotchas
