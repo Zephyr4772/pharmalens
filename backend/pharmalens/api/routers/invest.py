@@ -6,7 +6,7 @@ screener is one row per listed group and is cached for a few minutes because it 
 import time
 from datetime import datetime
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from ... import db
 from ... import watchlist as wl
@@ -257,3 +257,127 @@ def today(request: Request):
                    "breadth": [sum(1 for q in eq if q["change_pct"] > 0), sum(1 for q in eq if q["change_pct"] < 0)],
                    "asof": asof},
     }
+
+
+# ------------------------------------------------------------------ company dossier (investor tabs)
+def _group_row(pid: int) -> dict | None:
+    """The screener's row for one group; built directly for unlisted groups, which the screener leaves out."""
+    hit = next((r for r in companies_rows() if r["id"] == pid), None)
+    if hit:
+        return hit
+    cur = db.cursor()
+    rows = db.rows(cur, COMPANIES_SQL.replace("FROM parents WHERE ticker IS NOT NULL", "FROM parents WHERE id = ?"), [pid])
+    if not rows:
+        return None
+    r = rows[0]
+    _, s, d = cur.execute(DPCO_SQL.replace("(SELECT id FROM parents WHERE ticker IS NOT NULL)", "(?)"), [pid]).fetchone() or (pid, 0, 0)
+    r["skus"], r["dpco_share"] = s, (d / s * 100 if s else None)
+    r["quarter"] = qlabel(r["period_end"])
+    r["quality_trend"] = "rising" if r["nsq_12m"] > r["nsq_prev"] else "falling" if r["nsq_12m"] < r["nsq_prev"] else "flat"
+    r["flags"] = _flags(r)
+    r["risk"] = sum(2 if f["level"] == "red" else 1 for f in r["flags"])
+    return cleanrows([r])[0]
+
+
+def _scorecard(r: dict, banned: int, listed: bool) -> list[dict]:
+    """Every area with a level (red / amber / green / info) and the evidence, using /sanity's thresholds."""
+    def lvl(red, amber):
+        return "red" if red else "amber" if amber else "green"
+    skus = r["skus"] or 0
+    out = [
+        {"area": "Quality (CDSCO NSQ)", "level": lvl(r["spurious_12m"] or r["nsq_12m"] >= 10, r["nsq_12m"] >= 3),
+         "text": f"{r['nsq_12m']} failed-batch listings in 12 months ({r['quality_trend']}; {r['nsq_prev']} the year before)"
+                 + (f", {r['spurious_12m']} spurious" if r["spurious_12m"] else "")},
+        {"area": "US FDA", "level": lvl(r["fda_alerts_2y"], r["fda_recalls_1y"]),
+         "text": f"{r['fda_alerts_2y']} import alerts in 2 years, {r['fda_recalls_1y']} recalls in 12 months"},
+    ]
+    if listed:
+        out += [
+            {"area": "Regulatory orders", "level": lvl(r["reg_actions"] >= 3, r["reg_actions"]),
+             "text": f"{r['reg_actions']} actions / orders / penalties disclosed to NSE in 12 months"},
+            {"area": "Litigation", "level": lvl(False, r["litigation"]), "text": f"{r['litigation']} litigation disclosures in 12 months"},
+            {"area": "Management", "level": lvl(r["key_exits"], r["mgmt_exits"] >= 3),
+             "text": f"{r['mgmt_exits']} senior exits in 12 months" + (f", incl. {r['key_exits']} CEO/CFO/MD/auditor" if r["key_exits"] else "")},
+        ]
+    else:
+        out.append({"area": "Disclosures", "level": "info", "text": "unlisted: no exchange disclosures or published results to check"})
+    out += [
+        {"area": "Banned combinations", "level": lvl(False, skus and banned / skus > 0.01),
+         "text": f"{banned} of {skus:,} active SKUs match a prohibited FDC"},
+        {"area": "Price control (DPCO)", "level": "info",
+         "text": f"{r['dpco_share']:.0f}% of active SKUs contain an NPPA ceiling-priced molecule" if r["dpco_share"] is not None else "no active SKUs on file"},
+    ]
+    if r["revenue"] is not None:
+        loss = (r["net_profit"] or 0) < 0
+        out.append({"area": f"Financials {r['quarter']}",
+                    "level": lvl(loss or (r["profit_yoy"] is not None and r["profit_yoy"] <= -30), (r["rev_yoy"] or 0) < 0 or (r["profit_yoy"] or 0) < 0),
+                    "text": f"revenue ₹{r['revenue']:,.0f} cr" + (f" ({r['rev_yoy']:+.0f}% YoY)" if r["rev_yoy"] is not None else "")
+                            + f", net profit ₹{(r['net_profit'] or 0):,.0f} cr" + (f" ({r['profit_yoy']:+.0f}% YoY)" if r["profit_yoy"] is not None else "")})
+    return out
+
+
+def _peer_rank(rows: list[dict], me: dict, field: str, high_good: bool = True) -> dict | None:
+    vals = sorted(r[field] for r in rows if r[field] is not None)
+    if me.get(field) is None or not vals:
+        return None
+    better = sum(1 for v in vals if (v > me[field] if high_good else v < me[field]))
+    return {"field": field, "value": me[field], "rank": better + 1, "of": len(vals), "median": vals[len(vals) // 2]}
+
+
+def _with_yoy(rows: list[dict], quarterly: bool) -> list[dict]:
+    for r in rows:
+        prev = next((x for x in rows if 355 <= (r["period_end"] - x["period_end"]).days <= 375), None)
+        for f in ("revenue", "net_profit", "eps"):
+            a, b = r[f], (prev or {}).get(f)
+            r[f"{f}_yoy"] = (a / b - 1) * 100 if a is not None and b and b > 0 and a >= 0 else None
+        r["margin"] = r["net_profit"] / r["revenue"] * 100 if r["revenue"] and r["net_profit"] is not None else None
+        # operating profit before interest, depreciation and other income (EBITDA as analysts usually quote it)
+        r["ebitda"] = (r["pbt"] + (r["finance_costs"] or 0) + (r["depreciation"] or 0) - (r["other_income"] or 0)) if r["pbt"] is not None else None
+        r["ebitda_margin"] = r["ebitda"] / r["revenue"] * 100 if r["ebitda"] is not None and r["revenue"] else None
+        r["label"] = qlabel(r["period_end"]) if quarterly else f"FY{r['period_end'].year % 100:02d}"
+    return rows
+
+
+@router.get("/dossier/{slug}")
+def dossier(slug: str):
+    cur = db.cursor()
+    p = db.one(cur, "SELECT id, slug, name, ticker FROM parents WHERE slug = ?", [slug])
+    if not p:
+        raise HTTPException(404, "unknown group")
+    pid, sym = p["id"], p["ticker"]
+    me = _group_row(pid)
+    out: dict = {"listed": bool(sym)}
+
+    if sym:
+        q = db.rows(cur, """SELECT period_start, period_end, revenue, other_income, total_expenses, employee_cost, finance_costs,
+                                   depreciation, pbt, tax, net_profit, profit_owners, eps, filed_at, source_url
+                            FROM fin_results WHERE symbol = ? AND consolidated ORDER BY period_end DESC""", [sym])
+        out["quarters"] = cleanrows(_with_yoy([r for r in q if (r["period_end"] - r["period_start"]).days < 100], True)[:12])
+        out["annual"] = cleanrows(_with_yoy([r for r in q if 355 <= (r["period_end"] - r["period_start"]).days <= 375], False)[:5])
+        out["calendar"] = cleanrows(db.rows(cur, """SELECT meeting_date, purpose, description FROM results_calendar WHERE symbol = ?
+                                                    ORDER BY meeting_date DESC LIMIT 6""", [sym]))
+        if me:
+            allrows = companies_rows()
+            out["peers"] = [x for x in (_peer_rank(allrows, me, "rev_yoy"), _peer_rank(allrows, me, "profit_yoy"),
+                                        _peer_rank(allrows, me, "margin"), _peer_rank(allrows, me, "pe", high_good=False),
+                                        _peer_rank(allrows, me, "chg_1y"), _peer_rank(allrows, me, "market_cap")) if x]
+
+    banned = cur.execute("""SELECT count(*) FROM products p JOIN companies c ON c.id = p.company_id
+                            WHERE c.parent_id = ? AND p.ban_level = 'exact' AND NOT coalesce(p.is_discontinued, false)""", [pid]).fetchone()[0]
+    if me:
+        out["metrics"] = {k: me[k] for k in ("pe", "eps_ttm", "chg_1y", "rev_yoy", "profit_yoy", "margin", "quarter", "next_results", "risk", "flags")}
+        out["scorecard"] = _scorecard(me, banned, bool(sym))
+    out["nsq_quarterly"] = cleanrows(db.rows(cur, """
+        SELECT strftime(date_trunc('quarter', strptime(alert_month || '-01', '%Y-%m-%d')), '%Y-%m') AS q,
+               count(*) AS n, count(*) FILTER (WHERE category = 'SPURIOUS') AS spurious
+        FROM reg_nsq n JOIN companies c ON c.id = n.company_id
+        WHERE c.parent_id = ? AND alert_month >= strftime(current_date - INTERVAL 3 YEAR, '%Y-%m') GROUP BY 1 ORDER BY 1""", [pid]))
+    out["disclosures"] = cleanrows(db.rows(cur, """SELECT announced_at, topic, text, attachment FROM corp_announcements WHERE parent_id = ?
+                                                   AND topic IN ('regulatory_action', 'litigation', 'mgmt_exit', 'credit', 'usfda', 'plant')
+                                                   AND announced_at >= now() - INTERVAL 730 DAY ORDER BY announced_at DESC LIMIT 60""", [pid]))
+    ev = """SELECT e.id, e.ts, e.kind, e.severity, e.title, e.url, e.source FROM events e
+            LEFT JOIN companies c ON e.entity_type = 'company' AND c.id = e.entity_id
+            WHERE ((e.entity_type = 'parent' AND e.entity_id = ?) OR c.parent_id = ?) AND e.kind {} ORDER BY e.ts DESC LIMIT ?"""
+    out["timeline"] = cleanrows(db.rows(cur, ev.format("<> 'stock'"), [pid, pid, 60]))
+    out["approvals"] = cleanrows(db.rows(cur, ev.format("IN ('approval', 'trial', 'launch', 'usfda')"), [pid, pid, 40]))
+    return out

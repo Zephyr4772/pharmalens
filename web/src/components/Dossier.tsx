@@ -4,9 +4,31 @@ import { Bar, Panel } from "./ui";
 import { ProductTable } from "../screens/Screener";
 
 // Shared portfolio / market-position / quality blocks for company and group pages.
-export function Dossier({ d }: { d: Row }) {
+export function Dossier({ d, part = "all" }: { d: Row; part?: "all" | "portfolio" | "quality" }) {
   const nav = useNavigate();
   const maxSku = Math.max(...(d.portfolio ?? []).map((p: Row) => p.skus), 1);
+  const quality = (
+      <div className="grid cols-2">
+        <Panel title="Quality record — CDSCO NSQ / spurious listings">
+          {d.nsq.length ? (
+            <table className="tt"><tbody>{d.nsq.map((n: Row, i: number) => (
+              <tr key={i}><td>{n.alert_month}</td><td><span className={`badge ${n.category === "SPURIOUS" ? "b-down" : "b-warn"}`}>{n.category}</span></td>
+                <td title={n.product_text}>{n.product_text}</td><td className="amb">{n.batch_no}</td><td className="mut" title={n.reason}>{n.reason}</td>
+                <td><a href={n.source_url} target="_blank" rel="noreferrer">pdf</a></td></tr>
+            ))}</tbody></table>
+          ) : <div className="empty">no NSQ listings matched to this marketer</div>}
+        </Panel>
+        <Panel title="SKUs matching prohibited FDCs" sub="still listed as active">
+          {d.banned_skus.length ? (
+            <table className="tt"><tbody>{d.banned_skus.map((p: Row) => (
+              <tr key={p.id} onClick={() => nav(`/p/${p.id}`)}><td>{p.name}</td><td className="mut">{p.label}</td><td className="num">{inr(p.mrp)}</td>
+                <td><span className={`badge ${p.ban_level === "exact" ? "b-down" : "b-warn"}`}>{p.ban_level === "exact" ? "match" : "check"}</span></td></tr>
+            ))}</tbody></table>
+          ) : <div className="empty">none</div>}
+        </Panel>
+      </div>
+  );
+  if (part === "quality") return quality;
   return (
     <>
       <div className="grid cols-3">
@@ -49,25 +71,7 @@ export function Dossier({ d }: { d: Row }) {
           ) : <div className="empty">no category leadership in contested combinations</div>}
         </Panel>
       </div>
-      <div className="grid cols-2">
-        <Panel title="Quality record — CDSCO NSQ / spurious listings">
-          {d.nsq.length ? (
-            <table className="tt"><tbody>{d.nsq.map((n: Row, i: number) => (
-              <tr key={i}><td>{n.alert_month}</td><td><span className={`badge ${n.category === "SPURIOUS" ? "b-down" : "b-warn"}`}>{n.category}</span></td>
-                <td title={n.product_text}>{n.product_text}</td><td className="amb">{n.batch_no}</td><td className="mut" title={n.reason}>{n.reason}</td>
-                <td><a href={n.source_url} target="_blank" rel="noreferrer">pdf</a></td></tr>
-            ))}</tbody></table>
-          ) : <div className="empty">no NSQ listings matched to this marketer</div>}
-        </Panel>
-        <Panel title="SKUs matching prohibited FDCs" sub="still listed as active">
-          {d.banned_skus.length ? (
-            <table className="tt"><tbody>{d.banned_skus.map((p: Row) => (
-              <tr key={p.id} onClick={() => nav(`/p/${p.id}`)}><td>{p.name}</td><td className="mut">{p.label}</td><td className="num">{inr(p.mrp)}</td>
-                <td><span className={`badge ${p.ban_level === "exact" ? "b-down" : "b-warn"}`}>{p.ban_level === "exact" ? "match" : "check"}</span></td></tr>
-            ))}</tbody></table>
-          ) : <div className="empty">none</div>}
-        </Panel>
-      </div>
+      {part === "all" && quality}
       <Panel title="Most widely listed brands" right={d.slug && <Link to={`/screener?${d.subsidiaries ? "parent_id" : "company_id"}=${d.id}`}>all SKUs in screener ›</Link>}>
         <ProductTable rows={d.top_brands} showCompany={!!d.subsidiaries} />
       </Panel>

@@ -106,12 +106,16 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 
 ## Investor-first terminal (2026-11-02, see docs/product-strategy.md)
 - Primary user: investors / equity analysts. Build order: watchlist (done) -> Today + Companies (done) -> dossier
-  tabs (Financials, Risk, Pipeline) -> Specs results-day previews + weekly digest -> Signals / Calendar screens.
+  tabs (done) -> Specs results-day previews + weekly digest -> Signals / Calendar screens.
 - Watchlist: `watchlist` table per Tailscale login (`watchlist.py`, `/api/v1/watchlist`), shared by terminal stars,
   Specs /watch /unwatch /watchlist, and the owner's "Specs: watchlist" alert subscription (Telegram).
 - `api/routers/invest.py`: `/invest/today` (watchlist rows, ranked 7-day signals, results week, just reported,
   movers) and `/invest/companies` (one row per listed group: price, 1Y, P/E from trailing-4-quarter EPS, latest
   quarter YoY + margin, NSQ trend, US FDA, DPCO share, governance flags with /sanity thresholds; cached 5 min; CSV).
+- Company dossier (`/g/<slug>`) has tabs: Overview (KPIs, price, event timeline, news), Financials (listed only:
+  revenue/margin chart, quarterly + annual tables with YoY and EBITDA, peer ranks), Risk (sanity scorecard, NSQ per
+  quarter, NSE disclosures, US FDA, quality and banned SKUs, debarments), Pipeline, Portfolio & business. Data from
+  `/invest/dossier/<slug>` plus the existing `/parents/<slug>`.
 - Terminal: `/` is now Today (key 1), `/companies` the screener (2); the old home moved to `/market` (3). Rail keys
   were renumbered (NEWS n, SHELF s, FEED f).
 
