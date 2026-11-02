@@ -301,6 +301,17 @@ def product(pid: int):
     p["molecule_reference"] = molecule_reference(cur, mids, p.get("dosage_form")) if not info else None
     from ...linking.read import set_of_combo, us_eu_status
     p["us_eu"] = us_eu_status(set_of_combo(p.get("combo_id")))   # US / EU records with exactly this ingredient set
+    # plant stage 1: the firm that registered this brand under Rule 84AB (brand word + exact ingredients)
+    p["registered_makers"] = maybe(cur, """SELECT m.maker_key, any_value(m.name) AS name, coalesce(string_agg(DISTINCT b.brand_name, ', ') FILTER (WHERE bp.confidence >= 0.85), string_agg(DISTINCT b.brand_name, ', ')) AS brand_name,
+                                                  string_agg(DISTINCT b.license_number, ', ') AS license_number, arg_max(bp.method, bp.confidence) AS method,
+                                                  max(bp.confidence) AS confidence, arg_max(bp.evidence, bp.confidence) AS evidence,
+                                                  max(bp.confidence) < 0.85 AS inferred
+                                           FROM entity_links bp JOIN entity_links ml ON ml.linker = 'maker:brand_registry' AND ml.src_key = bp.src_key
+                                           JOIN makers m ON m.maker_key = ml.dst_id
+                                           JOIN brand_registry b ON coalesce(b.license_number, '') || '|' || coalesce(b.brand_norm, '') || '|' ||
+                                                coalesce(b.firm_name, '') || '|' || md5(coalesce(b.generic_name, '')) = bp.src_key
+                                           WHERE bp.linker = 'maker:brand_product' AND bp.dst_id = ?
+                                           GROUP BY m.maker_key ORDER BY max(bp.confidence) DESC LIMIT 10""", [str(pid)])
     from ...linking.read import timeline
     iset = set_of_combo(p.get("combo_id"))
     # events about exactly this ingredient set, plus events about this marketer and one of its molecules
@@ -480,7 +491,9 @@ def molecule(mid: int):
     m["stats"] = db.one(cur, "SELECT * FROM segment_stats WHERE segment_type='molecule' AND segment = ?", [str(mid)])
     m["nppa_ceiling"] = db.rows(cur, "SELECT form_strength, ceiling_price, unit, notification, year, source FROM nppa_ceiling WHERE molecule_id = ? ORDER BY year DESC", [mid])
     m["jan_aushadhi"] = db.rows(cur, "SELECT drug_code, name, unit_size, mrp, group_name FROM jan_aushadhi WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) AND mrp > 0 ORDER BY mrp LIMIT 20", [gids])
-    m["nsq"] = db.rows(cur, """SELECT alert_month, category, product_text, batch_no, manufacturer, reason, lab, source_url
+    m["nsq"] = db.rows(cur, """SELECT alert_month, category, product_text, batch_no, manufacturer, reason, lab, source_url,
+                                      (SELECT l.dst_id FROM entity_links l WHERE l.linker = 'maker:reg_nsq' AND l.src_key = CAST(reg_nsq.id AS VARCHAR)
+                                       AND l.confidence >= 0.85 LIMIT 1) AS maker_key
                                FROM reg_nsq WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY alert_month DESC NULLS LAST LIMIT 50""", [gids])
     m["bans"] = db.rows(cur, "SELECT combo_text, notification, notified_on, status FROM reg_banned_fdc WHERE list_contains(string_split(mkey, '|'), ?) ORDER BY notified_on DESC NULLS LAST", [m["mkey"]])
     m["shortages"] = db.rows(cur, "SELECT region, molecule_text, company, status, reason, updated_on, source FROM shortages WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY updated_on DESC NULLS LAST LIMIT 20", [gids])
@@ -574,6 +587,9 @@ def company(slug: str):
     from ...linking.read import approvals_for_company, company_group
     d["auto_group"] = None if c.get("parent_id") else company_group(c["id"])   # #3: curated groups stay as they are
     d["approvals_linked"] = approvals_for_company(c["id"])
+    from .makers import made_by       # plant stage 1: who holds the brand registrations for this marketer's SKUs
+    d["made_by"] = made_by(cur, c["id"])
+    d["as_maker"] = maybe(cur, "SELECT maker_key, name, records FROM makers WHERE company_id = ? ORDER BY records DESC LIMIT 3", [c["id"]])
     return cleanrows([d])[0]
 
 

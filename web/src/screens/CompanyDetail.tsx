@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { get, inr, num } from "../lib/api";
 import { Dossier } from "../components/Dossier";
-import { AutoGroup, CompanyApprovals, LaunchSignals, Timeline } from "../components/Linked";
+import { AutoGroup, CompanyApprovals, LaunchSignals, MadeBy, Timeline } from "../components/Linked";
 import { Debarments, Licences, Tenders } from "../components/Depth";
 import { ErrorBox, Kpi, Loading, Star } from "../components/ui";
 
@@ -35,6 +35,7 @@ export default function CompanyDetail() {
       <Debarments rows={d.debarments} />
       <div className="grid cols-2">
         <AutoGroup g={d.auto_group} />
+        <MadeBy rows={d.made_by} asMaker={d.as_maker} />
         <CompanyApprovals rows={d.approvals_linked} />
       </div>
       <div className="grid cols-2">

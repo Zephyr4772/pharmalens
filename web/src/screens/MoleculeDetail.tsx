@@ -7,6 +7,7 @@ import { ErrorBox, Kpi, Loading, Pager, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 import { Outcome } from "./Pipeline";
 import { CeilingHistory, Debarments, GlobalRegs, Pharmacology, Procurement, PvpiAlerts } from "../components/Depth";
+import { makerHref } from "./MakerDetail";
 import { LaunchSignals, MoleculeHygiene, MoleculeLinks, Timeline, UsEuStatus } from "../components/Linked";
 
 export default function MoleculeDetail() {
@@ -74,7 +75,7 @@ export default function MoleculeDetail() {
         <div className="stack">
           <Panel title="Quality failures (CDSCO NSQ/spurious)">
             {d.nsq.length ? <table className="tt"><tbody>{d.nsq.map((n: Row, i: number) => (
-              <tr key={i}><td>{n.alert_month}</td><td title={n.product_text}>{n.product_text}</td><td className="amb">{n.batch_no}</td><td className="mut" title={n.manufacturer}>{n.manufacturer}</td><td className="mut" title={n.reason}>{n.reason}</td></tr>
+              <tr key={i}><td>{n.alert_month}</td><td title={n.product_text}>{n.product_text}</td><td className="amb">{n.batch_no}</td><td className="mut" title={n.manufacturer}>{n.maker_key ? <Link to={makerHref(n.maker_key)}>{n.manufacturer}</Link> : n.manufacturer}</td><td className="mut" title={n.reason}>{n.reason}</td></tr>
             ))}</tbody></table> : <div className="empty">no NSQ listings</div>}
           </Panel>
           <Panel title="Prohibited combinations including this molecule">

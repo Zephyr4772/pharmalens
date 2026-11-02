@@ -23,6 +23,7 @@ import ComboDetail from "./screens/ComboDetail";
 import Groups from "./screens/Groups";
 import GroupDetail from "./screens/GroupDetail";
 import CompanyDetail from "./screens/CompanyDetail";
+import MakerDetail from "./screens/MakerDetail";
 import ProductDetail from "./screens/ProductDetail";
 import Equities from "./screens/Equities";
 import News from "./screens/News";
@@ -88,6 +89,7 @@ function Shell() {
             <Route path="/groups" element={<Groups />} />
             <Route path="/g/:slug" element={<GroupDetail />} />
             <Route path="/co/:slug" element={<CompanyDetail />} />
+            <Route path="/mk/*" element={<MakerDetail />} />
             <Route path="/p/:id" element={<ProductDetail />} />
             <Route path="/equities" element={<Equities />} />
             <Route path="/news" element={<News />} />

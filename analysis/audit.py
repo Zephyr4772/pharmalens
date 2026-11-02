@@ -135,6 +135,22 @@ def main(path: str, out: str | None = None) -> dict:
         """EXISTS (SELECT 1 FROM product_molecules pm LEFT JOIN cmap cm ON cm.alias_id = pm.molecule_id
                    JOIN molecule_enrichment e ON e.molecule_id = coalesce(cm.canonical_id, pm.molecule_id)
                    WHERE pm.product_id = p.id AND e.atc IS NOT NULL)""", act)
+    # ---- maker entity (plant stage 1)
+    has_makers = "makers" in tables
+    if not has_makers:
+        c.execute("CREATE TEMP TABLE makers (maker_key VARCHAR, company_id INTEGER, parent_id INTEGER, auto_group VARCHAR, distinctive BOOLEAN)")
+        c.execute("CREATE TEMP TABLE maker_makes_for (maker_key VARCHAR, company_id INTEGER, relation VARCHAR, skus INTEGER)")
+    cov("NSQ batch -> maker", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "maker"))
+    cov("US FDA action (India) -> maker", "usfda_actions a", linkcond("usfda_actions", "CAST(a.id AS VARCHAR)", "maker"), "country ILIKE '%india%'")
+    cov("brand registration -> maker", "brand_registry", linkcond("brand_registry", br_key, "maker"))
+    cov("brand registration -> SKU (brand + exact ingredients)", "brand_registry", linkcond("brand_registry", br_key, "product"))
+    cov("maker -> catalog company", "makers", "company_id IS NOT NULL")
+    cov("maker -> group (curated or auto)", "makers", "parent_id IS NOT NULL OR auto_group IS NOT NULL")
+    cov("active SKU -> registered maker (84AB)", "products p",
+        "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'brand_registry' AND hl.dst_type = 'product' AND hl.dst_id = CAST(p.id AS VARCHAR))", act)
+    C["maker -> marketer pairs (contract / same group / own)"] = {
+        "n": one("SELECT count(*) FROM maker_makes_for")[0], "linked": one("SELECT count(*) FROM maker_makes_for WHERE relation = 'contract'")[0],
+        "pct": pct(one("SELECT count(*) FROM maker_makes_for WHERE relation = 'contract'")[0], one("SELECT count(*) FROM maker_makes_for")[0])}
     cov("company -> group (curated)", "companies", "parent_id IS NOT NULL")
     cov("company -> group (curated or auto)", "companies c",
         f"parent_id IS NOT NULL OR {linkcond('companies', 'CAST(c.id AS VARCHAR)', 'auto_group')}")
@@ -161,6 +177,8 @@ def main(path: str, out: str | None = None) -> dict:
         count(*) FILTER (WHERE c.parent_id IS NOT NULL),
         count(*) FILTER (WHERE c.parent_id IS NOT NULL OR EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'companies'
                          AND hl.src_key = CAST(n.company_id AS VARCHAR) AND hl.dst_type = 'auto_group')),
+        count(*) FILTER (WHERE c.parent_id IS NOT NULL OR EXISTS (SELECT 1 FROM hl JOIN makers mk ON mk.maker_key = hl.dst_id
+                         WHERE hl.src_table = 'reg_nsq' AND hl.src_key = CAST(n.id AS VARCHAR) AND hl.dst_type = 'maker' AND mk.parent_id IS NOT NULL)),
         count(*) FILTER (WHERE pa.ticker IS NOT NULL),
         count(*) FILTER (WHERE pa.ticker IS NOT NULL AND EXISTS (SELECT 1 FROM quote_history h WHERE h.ticker = pa.ticker || '.NS'
              AND h.d BETWEEN strptime(n.alert_month || '-01', '%Y-%m-%d') AND strptime(n.alert_month || '-01', '%Y-%m-%d') + INTERVAL 45 DAY)),
@@ -176,7 +194,7 @@ def main(path: str, out: str | None = None) -> dict:
              AND w.published_at BETWEEN strptime(n.alert_month || '-01', '%Y-%m-%d') - INTERVAL 30 DAY AND strptime(n.alert_month || '-01', '%Y-%m-%d') + INTERVAL 60 DAY))
         FROM reg_nsq n LEFT JOIN companies c ON c.id = n.company_id LEFT JOIN parents pa ON pa.id = c.parent_id
         WHERE n.alert_month >= '2025-01'""")
-    P["P1 NSQ"] = dict(zip(["start", "product (resolvable)", "molecule", "maker", "group", "group (incl. auto)", "ticker", "price window", "news", "all hops"], r))
+    P["P1 NSQ"] = dict(zip(["start", "product (resolvable)", "molecule", "maker", "group", "group (incl. auto)", "group (curated, via maker)", "ticker", "price window", "news", "all hops"], r))
 
     # P2 SEC -> molecule -> approval -> brand registration -> NPPA price -> first listing (SEC since 2024)
     c.execute(f"""CREATE TEMP TABLE sec2 AS SELECT id, meeting_date, sortset(molecule_ids) s FROM sec_items
@@ -198,14 +216,19 @@ def main(path: str, out: str | None = None) -> dict:
                             "dated first listing (same set)", "all hops"], r))
 
     # P3 US FDA action -> plant -> company -> group -> ticker -> US applications (Indian actions)
+    mk_join = ("EXISTS (SELECT 1 FROM hl JOIN makers mk ON mk.maker_key = hl.dst_id WHERE hl.src_table = 'usfda_actions' "
+               "AND hl.src_key = CAST(a.id AS VARCHAR) AND hl.dst_type = 'maker' {})")
     r = one(f"""SELECT count(*), 0,
+        count(*) FILTER (WHERE {mk_join.format('')}),
+        count(*) FILTER (WHERE {mk_join.format("AND (mk.parent_id IS NOT NULL OR mk.auto_group IS NOT NULL)")}),
+        count(*) FILTER (WHERE a.parent_id IS NOT NULL OR {mk_join.format("AND mk.parent_id IS NOT NULL")}),
         count(*) FILTER (WHERE a.parent_id IS NOT NULL OR {linkcond('usfda_actions', 'CAST(a.id AS VARCHAR)', 'parent')}),
         count(*) FILTER (WHERE pa.ticker IS NOT NULL),
         count(*) FILTER (WHERE EXISTS (SELECT 1 FROM us_applications u WHERE u.parent_id = a.parent_id)),
         count(*) FILTER (WHERE {linkcond('usfda_actions', 'CAST(a.id AS VARCHAR)')}),
         0
         FROM usfda_actions a LEFT JOIN parents pa ON pa.id = a.parent_id WHERE a.country ILIKE '%india%'""")
-    P["P3 US FDA"] = dict(zip(["start (India)", "plant", "group", "ticker", "US applications", "molecule (recalls)", "all hops (needs plant)"], r))
+    P["P3 US FDA"] = dict(zip(["start (India)", "plant", "maker", "maker -> any group", "curated group (incl. via maker)", "group", "ticker", "US applications", "molecule (recalls)", "all hops (needs plant)"], r))
 
     # P4 tender -> molecule -> product -> maker -> quality record
     c.execute(f"""CREATE TEMP TABLE tmol AS SELECT {pr_key} k, company_id,

@@ -197,3 +197,32 @@ export function MoleculeHygiene({ h }: { h: Row | undefined }) {
     </Panel>
   );
 }
+
+const REL_BADGE: Record<string, [string, string]> = { own: ["b-up", "OWN"], same_group: ["b-info", "SAME GROUP"], contract: ["b-flag", "CONTRACT"] };
+const mkHref = (k: string) => `/mk/${encodeURIComponent(k)}`;
+
+// Plant stage 1 on a marketer's page: which firms registered its brands (own, same group, contract), and its own maker profile.
+export function MadeBy({ rows, asMaker }: { rows: Row[] | undefined; asMaker: Row[] | undefined }) {
+  if (!rows?.length && !asMaker?.length) return null;
+  return (
+    <Panel title="Made by" sub="firms that registered this marketer's brands under Rule 84AB (brand word + exact ingredients)">
+      {asMaker?.length ? <div style={{ marginBottom: 6 }}>As a manufacturer: {asMaker.map((m) => <Link key={m.maker_key} to={mkHref(m.maker_key)} style={{ marginRight: 8 }}>{m.name}</Link>)}</div> : null}
+      {rows?.length ? <table className="tt"><tbody>{rows.map((f) => <tr key={f.maker_key}><td><Link to={mkHref(f.maker_key)}>{f.maker}</Link></td>
+        <td><span className={`badge ${REL_BADGE[f.relation][0]}`}>{REL_BADGE[f.relation][1]}</span></td><td className="num">{f.skus} SKUs</td><td className="mut">{f.example}</td></tr>)}</tbody></table>
+        : <div className="empty">no brand registrations matched</div>}
+    </Panel>
+  );
+}
+
+export function RegisteredMaker({ rows }: { rows: Row[] | undefined }) {
+  const { toggle, keep } = useShowInferred();
+  if (!rows?.length) return null;
+  const shown = keep(rows);
+  return (
+    <Panel title="Registered manufacturer" sub="firm that registered this brand under Rule 84AB (brand word + exact ingredients match)" right={toggle}>
+      {shown.length ? <table className="tt"><tbody>{shown.map((r, i) => <tr key={i}><td><Link to={mkHref(r.maker_key)}>{r.name}</Link></td>
+        <td className="mut">{r.brand_name}</td><td className="faint">{r.license_number}</td><td><Inferred r={r} /></td></tr>)}</tbody></table>
+        : <div className="empty">only inferred matches: tick “show inferred”</div>}
+    </Panel>
+  );
+}

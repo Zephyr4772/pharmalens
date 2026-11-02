@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { BrandRegistry, MoleculeReference, NppaNotified, Pharmacology, Procurement } from "../components/Depth";
-import { Timeline, UsEuStatus } from "../components/Linked";
+import { RegisteredMaker, Timeline, UsEuStatus } from "../components/Linked";
 import { Link, useParams } from "react-router-dom";
 import { day, get, inr, num, type Row } from "../lib/api";
 import { ErrorBox, Kpi, Loading, Panel, Star } from "../components/ui";
@@ -224,6 +224,7 @@ export default function ProductDetail() {
         <BrandRegistry rows={d.brand_registry} />
       </div>
       {d.pharmacology && <Pharmacology e={d.pharmacology} />}
+      <RegisteredMaker rows={d.registered_makers} />
       <UsEuStatus s={d.us_eu} what="product" />
       <Timeline rows={d.timeline} sub="not this SKU's own record: events about the same ingredient combination (any maker), and about this marketer with one of these molecules" />
     </div>
