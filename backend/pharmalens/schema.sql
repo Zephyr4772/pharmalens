@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS parents (
     ticker      VARCHAR,          -- NSE symbol, NULL if unlisted
     hq          VARCHAR,
     ownership   VARCHAR,          -- indian_listed | indian_private | mnc_subsidiary | ...
-    notes       VARCHAR
+    notes       VARCHAR,
+    group_kind  VARCHAR DEFAULT 'curated'   -- curated (this table); auto-groups live in auto_groups (Phase 1 #3)
 );
 
 CREATE TABLE IF NOT EXISTS companies (

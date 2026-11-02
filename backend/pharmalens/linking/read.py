@@ -135,3 +135,26 @@ def launches(molecule: int | None = None, company: int | None = None, limit: int
     for r in rows:
         r["ingredients"] = " + ".join(names.get(i, i) for i in (r["ingredient_set"] or "").split(",") if i) or None
     return rows
+
+
+def company_group(company_id: int) -> dict | None:
+    """The company's auto-group (#3) with its other members, and inferred possible aliases."""
+    g = _q("""SELECT a.group_key, a.name, a.members, a.active_skus, a.group_kind, l.method, l.confidence, l.evidence
+              FROM entity_links l JOIN auto_groups a ON a.group_key = l.dst_id
+              WHERE l.src_table = 'companies' AND l.src_key = ? AND l.dst_type = 'auto_group'""", [str(company_id)])
+    if not g:
+        return None
+    out = g[0]
+    out["members_list"] = _q("""SELECT c.id, c.name, c.slug, c.active_count, l.confidence FROM entity_links l JOIN companies c ON CAST(c.id AS VARCHAR) = l.src_key
+                                WHERE l.dst_type = 'auto_group' AND l.dst_id = ? AND l.src_key <> ? ORDER BY c.active_count DESC LIMIT 20""",
+                             [out["group_key"], str(company_id)])
+    out["possible_aliases"] = _q("""SELECT c.id, c.name, c.slug, c.active_count, l.method, l.confidence, l.evidence FROM entity_links l
+                                    JOIN companies c ON CAST(c.id AS VARCHAR) = l.dst_id
+                                    WHERE l.src_table = 'companies' AND l.src_key = ? AND l.dst_type = 'company'""", [str(company_id)])
+    return out
+
+
+def approvals_for_company(company_id: int) -> list[dict]:
+    return _q("""SELECT a.approved_on, a.drug_text, a.approval_type, a.dosage_form, a.applicant, a.source_url, l.method, l.confidence, l.evidence
+                 FROM entity_links l JOIN reg_approvals a ON CAST(a.id AS VARCHAR) = l.src_key
+                 WHERE l.linker = 'company:approvals' AND l.dst_id = ? ORDER BY a.approved_on DESC NULLS LAST LIMIT 60""", [str(company_id)])

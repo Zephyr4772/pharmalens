@@ -143,3 +143,31 @@ export function LaunchSignals({ rows, showCompany = true }: { rows: Row[] | unde
     </Panel>
   );
 }
+
+// The auto-group of a company outside the curated groups (#3), and the CDSCO approvals linked to it.
+export function AutoGroup({ g }: { g: Row | null | undefined }) {
+  const { on, toggle } = useShowInferred();
+  if (!g) return null;
+  const aliases: Row[] = on ? g.possible_aliases ?? [] : [];
+  return (
+    <Panel title="Group" sub={g.members > 1 ? `auto-group: ${g.members} catalog names for one firm (name variants)` : "auto-group: this company on its own (not part of a curated group)"}
+      right={g.possible_aliases?.length ? toggle : undefined}>
+      <div><span className="badge b-mute">AUTO</span> {g.name} <span className="faint">· {g.active_skus} active SKUs</span> <Inferred r={g} /></div>
+      {g.members_list?.length > 0 && <table className="tt" style={{ marginTop: 6 }}><tbody>{g.members_list.map((m: Row) => <tr key={m.id}>
+        <td><Link to={`/co/${m.slug}`}>{m.name}</Link></td><td className="num faint">{m.active_count} SKUs</td></tr>)}</tbody></table>}
+      {aliases.length > 0 && <table className="tt" style={{ marginTop: 6 }}><tbody>{aliases.map((m: Row) => <tr key={m.id}>
+        <td><Link to={`/co/${m.slug}`}>{m.name}</Link></td><td className="faint">possible alias</td><td><Inferred r={{ ...m, inferred: true }} /></td></tr>)}</tbody></table>}
+    </Panel>
+  );
+}
+
+export function CompanyApprovals({ rows }: { rows: Row[] | undefined }) {
+  if (!rows?.length) return null;
+  return (
+    <Panel title="CDSCO approvals" sub="approvals whose applicant is this company (exact firm-name match)" className="tall">
+      <table className="tt"><tbody>{rows.map((a, i) => <tr key={i}><td>{day(a.approved_on)}</td><td title={a.drug_text}>{a.drug_text}</td>
+        <td className="mut">{String(a.approval_type ?? "").replace(/_/g, " ")}</td><td>{a.source_url && <a href={a.source_url} target="_blank" rel="noreferrer">src</a>}</td>
+        <td><Inferred r={a} /></td></tr>)}</tbody></table>
+    </Panel>
+  );
+}

@@ -119,11 +119,15 @@ def main(path: str, out: str | None = None) -> dict:
     cov("molecule -> any dated launch signal (incl. inferred)", "molecules m",
         "EXISTS (SELECT 1 FROM launch_signals l WHERE list_contains(string_split(l.ingredient_set, ','), CAST(m.id AS VARCHAR)))")
     cov("company -> group (curated)", "companies", "parent_id IS NOT NULL")
-    if has_group_kind:
-        cov("company -> group (curated or auto)", "companies c",
-            f"parent_id IS NOT NULL OR {linkcond('companies', 'CAST(c.id AS VARCHAR)', 'parent')}")
+    cov("company -> group (curated or auto)", "companies c",
+        f"parent_id IS NOT NULL OR {linkcond('companies', 'CAST(c.id AS VARCHAR)', 'auto_group')}")
+    cov("company -> multi-company auto-group (name variants)", "companies c",
+        f"EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'companies' AND hl.src_key = CAST(c.id AS VARCHAR) AND hl.method = 'name_variant')")
     cov("active product -> group (curated)", "products p",
         "EXISTS (SELECT 1 FROM companies c WHERE c.id = p.company_id AND c.parent_id IS NOT NULL)", act)
+    cov("active product -> group (curated or auto)", "products p",
+        f"""EXISTS (SELECT 1 FROM companies c WHERE c.id = p.company_id AND (c.parent_id IS NOT NULL OR
+            EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'companies' AND hl.src_key = CAST(c.id AS VARCHAR) AND hl.dst_type = 'auto_group')))""", act)
     cov("approval -> company", "reg_approvals a", linkcond("reg_approvals", "CAST(a.id AS VARCHAR)", "company"), "applicant IS NOT NULL")
     cov("tender -> company", "procurement_rates", f"company_id IS NOT NULL OR {linkcond('procurement_rates', pr_key, 'company')}")
 
@@ -138,6 +142,8 @@ def main(path: str, out: str | None = None) -> dict:
         count(*) FILTER (WHERE n.molecule_ids IS NOT NULL),
         count(*) FILTER (WHERE n.company_id IS NOT NULL),
         count(*) FILTER (WHERE c.parent_id IS NOT NULL),
+        count(*) FILTER (WHERE c.parent_id IS NOT NULL OR EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'companies'
+                         AND hl.src_key = CAST(n.company_id AS VARCHAR) AND hl.dst_type = 'auto_group')),
         count(*) FILTER (WHERE pa.ticker IS NOT NULL),
         count(*) FILTER (WHERE pa.ticker IS NOT NULL AND EXISTS (SELECT 1 FROM quote_history h WHERE h.ticker = pa.ticker || '.NS'
              AND h.d BETWEEN strptime(n.alert_month || '-01', '%Y-%m-%d') AND strptime(n.alert_month || '-01', '%Y-%m-%d') + INTERVAL 45 DAY)),
@@ -153,7 +159,7 @@ def main(path: str, out: str | None = None) -> dict:
              AND w.published_at BETWEEN strptime(n.alert_month || '-01', '%Y-%m-%d') - INTERVAL 30 DAY AND strptime(n.alert_month || '-01', '%Y-%m-%d') + INTERVAL 60 DAY))
         FROM reg_nsq n LEFT JOIN companies c ON c.id = n.company_id LEFT JOIN parents pa ON pa.id = c.parent_id
         WHERE n.alert_month >= '2025-01'""")
-    P["P1 NSQ"] = dict(zip(["start", "product (resolvable)", "molecule", "maker", "group", "ticker", "price window", "news", "all hops"], r))
+    P["P1 NSQ"] = dict(zip(["start", "product (resolvable)", "molecule", "maker", "group", "group (incl. auto)", "ticker", "price window", "news", "all hops"], r))
 
     # P2 SEC -> molecule -> approval -> brand registration -> NPPA price -> first listing (SEC since 2024)
     c.execute(f"""CREATE TEMP TABLE sec2 AS SELECT id, meeting_date, sortset(molecule_ids) s FROM sec_items

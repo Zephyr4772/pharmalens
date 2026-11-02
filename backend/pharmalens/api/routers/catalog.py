@@ -558,6 +558,9 @@ def company(slug: str):
     d["timeline"] = timeline([("company", c["id"])])
     from ...linking.read import launches
     d["launches"] = launches(company=c["id"])
+    from ...linking.read import approvals_for_company, company_group
+    d["auto_group"] = None if c.get("parent_id") else company_group(c["id"])   # #3: curated groups stay as they are
+    d["approvals_linked"] = approvals_for_company(c["id"])
     return cleanrows([d])[0]
 
 
