@@ -7,7 +7,7 @@ import { ErrorBox, Kpi, Loading, Pager, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 import { Outcome } from "./Pipeline";
 import { CeilingHistory, Debarments, GlobalRegs, Pharmacology, Procurement, PvpiAlerts } from "../components/Depth";
-import { MoleculeLinks, UsEuStatus } from "../components/Linked";
+import { MoleculeLinks, Timeline, UsEuStatus } from "../components/Linked";
 
 export default function MoleculeDetail() {
   const { id } = useParams();
@@ -123,6 +123,7 @@ export default function MoleculeDetail() {
         </div>
       )}
       <UsEuStatus s={d.us_eu} what="molecule on its own" />
+      <Timeline rows={d.timeline} />
       <MoleculeLinks links={d.links} />
       <CeilingHistory rows={d.ceiling_history} />
       <Debarments rows={d.debarments} showFirm />

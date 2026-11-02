@@ -382,6 +382,14 @@ def dossier(slug: str):
     ev = """SELECT e.id, e.ts, e.kind, e.severity, e.title, e.url, e.source FROM events e
             LEFT JOIN companies c ON e.entity_type = 'company' AND c.id = e.entity_id
             WHERE ((e.entity_type = 'parent' AND e.entity_id = ?) OR c.parent_id = ?) AND e.kind {} ORDER BY e.ts DESC LIMIT ?"""
-    out["timeline"] = cleanrows(db.rows(cur, ev.format("<> 'stock'"), [pid, pid, 60]))
+    tl = {r["id"]: r for r in db.rows(cur, ev.format("<> 'stock'"), [pid, pid, 60])}
+    try:   # events linked to this group through event_entities (Phase 1 #9): high-confidence only
+        for r in db.rows(cur, """SELECT e.id, e.ts, e.kind, e.severity, e.title, e.url, e.source FROM event_entities x JOIN events e ON e.id = x.event_id
+                                 WHERE x.entity_type = 'parent' AND x.entity_id = ? AND x.confidence >= 0.85 AND e.kind <> 'stock'
+                                 ORDER BY e.ts DESC LIMIT 60""", [str(pid)]):
+            tl.setdefault(r["id"], r)
+    except Exception:  # noqa: BLE001 — before the first linker run
+        pass
+    out["timeline"] = cleanrows(sorted(tl.values(), key=lambda r: str(r["ts"]), reverse=True)[:60])
     out["approvals"] = cleanrows(db.rows(cur, ev.format("IN ('approval', 'trial', 'launch', 'usfda')"), [pid, pid, 40]))
     return out

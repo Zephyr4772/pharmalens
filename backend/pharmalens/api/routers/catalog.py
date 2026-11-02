@@ -293,6 +293,12 @@ def product(pid: int):
     p["molecule_reference"] = molecule_reference(cur, mids, p.get("dosage_form")) if not info else None
     from ...linking.read import set_of_combo, us_eu_status
     p["us_eu"] = us_eu_status(set_of_combo(p.get("combo_id")))   # US / EU records with exactly this ingredient set
+    from ...linking.read import timeline
+    iset = set_of_combo(p.get("combo_id"))
+    # events about exactly this ingredient set, plus events about this marketer and one of its molecules
+    p["timeline"] = sorted({e["id"]: e for e in timeline([("ingredient_set", iset)] if iset else [])
+                            + [e for m in mids for e in (timeline([("company", p["company_id"]), ("molecule", m)], 20, True) if p.get("company_id") else [])]}.values(),
+                           key=lambda e: str(e["ts"]), reverse=True)[:60]
     return cleanrows([p])[0]
 
 
@@ -396,6 +402,10 @@ def combo(cid: int):
                                    [str(m) for m in mids] + [len(mids)]) if mids else []
     c["related"] = db.rows(cur, """SELECT id, label, product_count, min_mrp, median_mrp FROM combos
                                    WHERE mkey = ? AND id <> ? ORDER BY product_count DESC LIMIT 20""", [c["mkey"], cid])
+    from ...linking.read import set_of_combo, timeline, us_eu_status
+    iset = set_of_combo(cid)
+    c["timeline"] = timeline([("ingredient_set", iset)]) if iset else []
+    c["us_eu"] = us_eu_status(iset)
     return cleanrows([c])[0]
 
 
@@ -503,6 +513,8 @@ def molecule(mid: int):
     m["links"] = for_molecule(mid)      # derived links (Phase 1): each row has method, confidence and `inferred`
     from ...linking.read import us_eu_status
     m["us_eu"] = us_eu_status(str(mid))  # single-ingredient US / EU records (combinations are on product pages)
+    from ...linking.read import timeline
+    m["timeline"] = timeline([("molecule", mid)])
     return cleanrows([m])[0]
 
 
@@ -534,7 +546,10 @@ def company(slug: str):
     c = db.one(cur, "SELECT c.*, pa.name parent, pa.slug parent_slug FROM companies c LEFT JOIN parents pa ON pa.id = c.parent_id WHERE c.slug = ?", [slug])
     if not c:
         raise HTTPException(404, "company not found")
-    return cleanrows([dossier(cur, "company", c["id"], c)])[0]
+    d = dossier(cur, "company", c["id"], c)
+    from ...linking.read import timeline
+    d["timeline"] = timeline([("company", c["id"])])
+    return cleanrows([d])[0]
 
 
 @router.get("/parents")

@@ -92,3 +92,18 @@ def us_eu_status(ingredient_set: str | None) -> dict | None:
                     "ema": len(ema)},
         "orange_book": ob[:40], "patents": pats[:40], "ema": ema[:20],
     }
+
+
+def timeline(pairs: list[tuple[str, str]], limit: int = 60, require_all: bool = False) -> list[dict]:
+    """Events linked to any of (entity_type, entity_id) — or to all of them with require_all — newest first, each with
+    the strongest link's method and confidence."""
+    if not pairs:
+        return []
+    cond = " OR ".join("(x.entity_type = ? AND x.entity_id = ?)" for _ in pairs)
+    args = [v for p in pairs for v in (p[0], str(p[1]))]
+    having = f"HAVING count(DISTINCT x.entity_type || ':' || x.entity_id) = {len(pairs)}" if require_all else ""
+    return _q(f"""SELECT e.id, e.ts, e.kind, e.severity, e.title, e.url, e.source,
+                         arg_max(x.method, x.confidence) AS method, max(x.confidence) AS confidence, arg_max(x.evidence, x.confidence) AS evidence
+                  FROM event_entities x JOIN events e ON e.id = x.event_id
+                  WHERE ({cond}) GROUP BY ALL {having}
+                  ORDER BY e.ts DESC LIMIT {int(limit)}""", args)

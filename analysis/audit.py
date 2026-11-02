@@ -90,7 +90,7 @@ def main(path: str, out: str | None = None) -> dict:
     # ---- #9 events with entities
     cov("event -> any entity", "events e", "e.entity_type IS NOT NULL OR EXISTS (SELECT 1 FROM event_entities x WHERE x.event_id = e.id AND x.confidence >= 0.85)")
     cov("event -> 2+ entities", "events e", f"(SELECT count(*) FROM event_entities x WHERE x.event_id = e.id AND x.confidence >= {HIGH}) >= 2")
-    for et in ("molecule", "combo", "company", "parent"):
+    for et in ("molecule", "ingredient_set", "company", "parent"):
         cov(f"event -> {et}", "events e", f"(e.entity_type = '{et}') OR EXISTS (SELECT 1 FROM event_entities x WHERE x.event_id = e.id AND x.entity_type = '{et}' AND x.confidence >= {HIGH})")
 
     # ---- #11 price history

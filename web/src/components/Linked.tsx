@@ -89,3 +89,22 @@ export function UsEuStatus({ s, what }: { s: Row | null | undefined; what: strin
     </Panel>
   );
 }
+
+// Events linked to this entity through event_entities; inferred links only on request.
+export function Timeline({ rows, sub }: { rows: Row[] | undefined; sub?: string }) {
+  const { toggle, keep } = useShowInferred();
+  const shown = keep(rows);
+  if (!rows?.length) return null;
+  return (
+    <Panel title="Timeline" sub={sub ?? "events linked to this entity, newest first · hover ⓘ for why"} className="tall" right={toggle}>
+      {shown.length ? shown.map((e) => (
+        <div key={e.id} className={`ev ev-${e.severity}`}>
+          <span className="ev-time" title={e.ts}>{day(e.ts)}</span>
+          <span className="ev-kind">{String(e.kind).toUpperCase()}</span>
+          {e.url ? <a href={e.url} target="_blank" rel="noreferrer" className="ev-title">{e.title}</a> : <span className="ev-title">{e.title}</span>}
+          <Inferred r={e} />
+        </div>
+      )) : <div className="empty">only inferred links: tick “show inferred”</div>}
+    </Panel>
+  );
+}

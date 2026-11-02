@@ -5,6 +5,7 @@ import { day, get, inr, num, type Row } from "../lib/api";
 import { ShareTable } from "../components/Share";
 import { ErrorBox, Kpi, Loading, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
+import { Timeline, UsEuStatus } from "../components/Linked";
 
 export default function ComboDetail() {
   const { id } = useParams();
@@ -48,6 +49,10 @@ export default function ComboDetail() {
         </div>
       </div>
       <Procurement rows={d.procurement} sub="state tender rates for these molecules (all strengths) — compare against the brand ladder" />
+      <div className="grid cols-2">
+        <Timeline rows={d.timeline} sub="events about exactly this combination of ingredients (complete ingredient match only)" />
+        <UsEuStatus s={d.us_eu} what="combination" />
+      </div>
     </div>
   );
 }
