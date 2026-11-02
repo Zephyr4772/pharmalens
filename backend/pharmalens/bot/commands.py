@@ -54,6 +54,8 @@ COMMANDS = [
     ("compare", "compare companies side by side: /compare sun vs drl"),
     ("leaders", "who leads each therapy area, and who is launching most"),
     ("results", "results calendar and latest reported quarters"),
+    ("preview", "results-day preview: the bar a company has to clear"),
+    ("digest", "weekly digest: watchlist, results season, flags, next week"),
     ("chart", "chart a stock, a company's quality record or a product's prices"),
     ("export", "answer a question as a CSV file"),
     ("feeds", "data feed health, with run buttons"),
@@ -680,13 +682,35 @@ def watchlist_cmd(_: str = "") -> list[Reply]:
 
 
 # ------------------------------------------------------------------ routing
+def preview_cmd(arg: str) -> list[Reply]:
+    from . import desk
+    if not arg.strip():
+        out = desk.previews_for(datetime.now().date())
+        return out or [Reply("Nobody on the calendar reports today. `/preview <company>` for any one of them.")]
+    g = _find_group(arg) if not str(arg).isdigit() else db.one(db.cursor(), "SELECT id, slug, name, ticker FROM parents WHERE id = ?", [int(arg)])
+    if not g:
+        return [Reply(f"No corporate group matches '{arg}'.")]
+    if not g["ticker"]:
+        return [Reply(f"{g['name']} is not listed, so there are no results to preview.")]
+    nxt = db.cursor().execute("""SELECT min(meeting_date) FROM results_calendar WHERE parent_id = ? AND meeting_date >= current_date
+                                 AND regexp_matches(lower(description), 'result')""", [g["id"]]).fetchone()[0]
+    r = desk.preview(g["id"], nxt)
+    return [r] if r else [Reply("Not enough on file for a preview.")]
+
+
+def digest_cmd(_: str = "") -> list[Reply]:
+    from . import desk
+    return [desk.weekly()]
+
+
 HANDLERS = {"help": help_, "start": help_, "brief": brief, "check": check, "company": company, "chart": chart,
             "export": export, "feeds": feeds, "status": status, "fin": fin, "sanity": sanity, "compare": compare,
-            "leaders": leaders, "results": results, "watch": watch, "unwatch": unwatch, "watchlist": watchlist_cmd}
+            "leaders": leaders, "results": results, "watch": watch, "unwatch": unwatch, "watchlist": watchlist_cmd,
+            "preview": preview_cmd, "digest": digest_cmd}
 CALLBACKS = {"brief": lambda a: brief(a), "check": lambda a: product_card(int(a)), "cheap": cheap, "chart": chart_cb,
              "news": news_for, "feeds": feeds, "run": run_ask, "runyes": run_yes, "events": events,
              "fin": fin, "sanity": sanity, "flags": flags_for, "unwatch": unwatch, "watchlist": watchlist_cmd,
-             "noop": lambda a: [Reply("Fine. Nothing touched.")]}
+             "results": results, "preview": preview_cmd, "noop": lambda a: [Reply("Fine. Nothing touched.")]}
 
 
 def command(name: str, arg: str) -> list[Reply] | None:

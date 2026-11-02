@@ -10,7 +10,8 @@ import os
 from . import db
 
 SYSTEM_SUB = "Specs: watchlist"
-SKIP_KINDS = {"news"}          # news about watched names arrives in briefings, not as instant pings
+SKIP_KINDS = {"news",           # news about watched names arrives in briefings, not as instant pings
+              "results", "results_due"}   # the results desk sends previews and summaries for watched names instead
 
 
 def owner_login() -> str:
@@ -54,8 +55,8 @@ def sync_subscription() -> None:
     with db.writer() as w:
         row = w.execute("SELECT id FROM alert_subscriptions WHERE name = ?", [SYSTEM_SUB]).fetchone()
         if row:
-            w.execute("UPDATE alert_subscriptions SET watch = ?, channels = ?, active = ? WHERE id = ?",
-                      [json.dumps(watch), json.dumps([{"type": "telegram", "chat_id": chat}]), bool(watch), row[0]])
+            w.execute("UPDATE alert_subscriptions SET watch = ?, channels = ?, active = ?, kinds = ? WHERE id = ?",
+                      [json.dumps(watch), json.dumps([{"type": "telegram", "chat_id": chat}]), bool(watch), kinds, row[0]])
         elif watch:
             max_eid = w.execute("SELECT coalesce(max(id), 0) FROM events").fetchone()[0]
             max_nsq = w.execute("SELECT coalesce(max(id), 0) FROM reg_nsq").fetchone()[0]

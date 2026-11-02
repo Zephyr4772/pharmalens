@@ -71,7 +71,7 @@ Where answers come from:
   company's entities; prefer them for "how is X doing" questions.
 - Actions (running a feed) need confirmation: call the tool; the owner is then asked to confirm.
 - The owner also has commands with buttons: /brief, /check <medicine>, /company <name>, /fin <company>,
-  /sanity <company>, /compare a vs b, /leaders [therapy], /results, /chart <stock|company|brand|nsq>,
+  /sanity <company>, /compare a vs b, /leaders [therapy], /results, /preview [company], /digest, /chart <stock|company|brand|nsq>,
   /export <question> (CSV file), /feeds, /status. When a chart or a file would answer better than text, say which
   command to tap.
 - Keep answers short; this is a phone screen. Light formatting only: **bold** for a heading or key number, "- " bullets

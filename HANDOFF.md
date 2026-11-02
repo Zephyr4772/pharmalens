@@ -106,7 +106,7 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 
 ## Investor-first terminal (2026-11-02, see docs/product-strategy.md)
 - Primary user: investors / equity analysts. Build order: watchlist (done) -> Today + Companies (done) -> dossier
-  tabs (done) -> Specs results-day previews + weekly digest -> Signals / Calendar screens.
+  tabs (done) -> Specs results desk (done) -> Specs results-day previews + weekly digest -> Signals / Calendar screens.
 - Watchlist: `watchlist` table per Tailscale login (`watchlist.py`, `/api/v1/watchlist`), shared by terminal stars,
   Specs /watch /unwatch /watchlist, and the owner's "Specs: watchlist" alert subscription (Telegram).
 - `api/routers/invest.py`: `/invest/today` (watchlist rows, ranked 7-day signals, results week, just reported,
@@ -126,7 +126,14 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 - Name understanding: `bot/names.py` builds `data/name_index.json` (groups, companies, molecules, indices with short
   forms, tickers, nicknames, initials; fuzzy via rapidfuzz). Rebuilt daily by the `name_index` feed. Each message's
   names are resolved and appended for the agent; `resolve_names` tool for the rest; commands use `_find_group`.
-- Commands: /brief /check /company /fin /sanity /compare /leaders /results /chart /export /feeds /status.
+- Commands: /brief /check /company /fin /sanity /compare /leaders /results /preview /digest /watch /unwatch
+  /watchlist /chart /export /feeds /status.
+- Results desk (`bot/desk.py`, feeds in `connectors/results_desk.py`): `results_preview` 07:45 (watched groups
+  reporting today get a preview: last quarter, the year-ago quarter to beat, margin trend, stock, flags; others in
+  one line), `results_summary` every 2h at :35 after `nse_results` (newest quarter per company, filed in the last 3
+  days, once each via `desk|sum|<sym>|<date>` state; watched get a chart + season rank, the rest one batched
+  message), `weekly_digest` Saturday 10:00. The watchlist subscription no longer sends plain results/results_due
+  events (re-synced at startup).
 - Briefings (`connectors/briefing.py`, 08:30 and 19:30) replace the old 2-hourly pulse; `bot/briefing.py` gathers
   facts and the model words them (template fallback). Quiet periods send one line.
 - Financial data: `nse_results` feed parses NSE integrated-filing pages into `fin_results` (₹ crore) and board

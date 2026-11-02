@@ -89,6 +89,10 @@ GROUP BY 1
 """
 
 
+def _n(n: int, word: str) -> str:
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
 def _flags(r: dict) -> list[dict]:
     """Same thresholds as Specs' /sanity, as short badges: level red | amber."""
     out = []
@@ -97,17 +101,17 @@ def _flags(r: dict) -> list[dict]:
     elif r["nsq_12m"] >= 3:
         out.append({"level": "amber", "label": "QUALITY", "why": f"{r['nsq_12m']} failed batches in 12m"})
     if r["fda_alerts_2y"]:
-        out.append({"level": "red", "label": "USFDA", "why": f"{r['fda_alerts_2y']} import alerts in 2y"})
+        out.append({"level": "red", "label": "USFDA", "why": f"{_n(r['fda_alerts_2y'], 'import alert')} in 2y"})
     elif r["fda_recalls_1y"]:
-        out.append({"level": "amber", "label": "USFDA", "why": f"{r['fda_recalls_1y']} recalls in 12m"})
+        out.append({"level": "amber", "label": "USFDA", "why": f"{_n(r['fda_recalls_1y'], 'recall')} in 12m"})
     if r["reg_actions"] >= 3:
-        out.append({"level": "red", "label": "ORDERS", "why": f"{r['reg_actions']} regulatory actions disclosed in 12m"})
+        out.append({"level": "red", "label": "ORDERS", "why": f"{_n(r['reg_actions'], 'regulatory action')} disclosed in 12m"})
     elif r["reg_actions"]:
-        out.append({"level": "amber", "label": "ORDERS", "why": f"{r['reg_actions']} regulatory action(s) disclosed in 12m"})
+        out.append({"level": "amber", "label": "ORDERS", "why": f"{_n(r['reg_actions'], 'regulatory action')} disclosed in 12m"})
     if r["litigation"]:
-        out.append({"level": "amber", "label": "LEGAL", "why": f"{r['litigation']} litigation disclosures in 12m"})
+        out.append({"level": "amber", "label": "LEGAL", "why": f"{_n(r['litigation'], 'litigation disclosure')} in 12m"})
     if r["key_exits"]:
-        out.append({"level": "red", "label": "MGMT", "why": f"{r['key_exits']} CEO/CFO/MD/auditor exit(s) in 12m"})
+        out.append({"level": "red", "label": "MGMT", "why": f"{_n(r['key_exits'], 'CEO/CFO/MD/auditor exit')} in 12m"})
     elif r["mgmt_exits"] >= 3:
         out.append({"level": "amber", "label": "MGMT", "why": f"{r['mgmt_exits']} senior exits in 12m"})
     if (r["net_profit"] or 0) < 0 or (r["profit_yoy"] is not None and r["profit_yoy"] <= -30):
