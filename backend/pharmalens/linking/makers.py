@@ -77,10 +77,11 @@ def clean(name: str) -> str:
 
 
 def _sql_links(w, linker: str, rows_sql: str) -> int:
-    w.execute("DELETE FROM entity_links WHERE linker = ?", [linker])
+    w.execute("DELETE FROM entity_links WHERE linker = ?", [linker]).fetchall()
     # rows_sql yields, in order: src_table, src_key, dst_type, dst_id, method, confidence, evidence, licence
-    w.execute(f"""INSERT INTO entity_links SELECT '{linker}', q.*, now() FROM ({rows_sql}) q ON CONFLICT DO NOTHING""")
-    return w.execute("SELECT count(*) FROM entity_links WHERE linker = ?", [linker]).fetchone()[0]
+    # every result is read to the end: the server's DuckDB refuses new work while a result is pending
+    w.execute(f"""INSERT INTO entity_links SELECT '{linker}', q.*, now() FROM ({rows_sql}) q ON CONFLICT DO NOTHING""").fetchall()
+    return w.execute("SELECT count(*) FROM entity_links WHERE linker = ?", [linker]).fetchall()[0][0]
 
 
 def run() -> list[dict]:
@@ -208,7 +209,7 @@ def run() -> list[dict]:
             JOIN makers mk ON mk.maker_key = m.dst_id LEFT JOIN companies co ON co.id = p.company_id
             WHERE bp.linker = 'maker:brand_product' AND bp.confidence >= {HIGH} AND p.company_id IS NOT NULL
             GROUP BY m.dst_id, p.company_id""")
-        mf = w.execute("SELECT count(*), count(*) FILTER (WHERE relation = 'contract') FROM maker_makes_for").fetchone()
+        mf = w.execute("SELECT count(*), count(*) FILTER (WHERE relation = 'contract') FROM maker_makes_for").fetchall()[0]
         w.execute("DROP TABLE IF EXISTS _via")
         w.execute("INSERT INTO linker_runs VALUES ('makers', now(), now(), ?, ?, ?)",
                   [len(mdf), int(mdf.distinctive.sum()), f"{mf[0]:,} maker->marketer pairs ({mf[1]:,} contract)"])
