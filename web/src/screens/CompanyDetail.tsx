@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { get, inr, num } from "../lib/api";
 import { Dossier } from "../components/Dossier";
-import { Timeline } from "../components/Linked";
+import { LaunchSignals, Timeline } from "../components/Linked";
 import { Debarments, Licences, Tenders } from "../components/Depth";
 import { ErrorBox, Kpi, Loading, Star } from "../components/ui";
 
@@ -33,7 +33,10 @@ export default function CompanyDetail() {
         <Licences rows={d.licences} />
       </div>
       <Debarments rows={d.debarments} />
-      <Timeline rows={d.timeline} sub="events linked to this marketer (NSQ, debarments, launches, recalls) and its group" />
+      <div className="grid cols-2">
+        <Timeline rows={d.timeline} sub="events linked to this marketer (NSQ, debarments, launches, recalls) and its group" />
+        <LaunchSignals rows={d.launches} showCompany={false} />
+      </div>
       <Dossier d={d} />
     </div>
   );

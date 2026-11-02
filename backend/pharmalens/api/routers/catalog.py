@@ -520,6 +520,8 @@ def molecule(mid: int):
     m["us_eu"] = us_eu_status(str(mid))  # single-ingredient US / EU records (combinations are on product pages)
     from ...linking.read import timeline
     m["timeline"] = timeline([("molecule", mid)])
+    from ...linking.read import launches
+    m["launches"] = launches(molecule=mid)
     return cleanrows([m])[0]
 
 
@@ -554,6 +556,8 @@ def company(slug: str):
     d = dossier(cur, "company", c["id"], c)
     from ...linking.read import timeline
     d["timeline"] = timeline([("company", c["id"])])
+    from ...linking.read import launches
+    d["launches"] = launches(company=c["id"])
     return cleanrows([d])[0]
 
 

@@ -118,6 +118,7 @@ TABLES = {
     "event_entities":       (["drugden", "news", "nse", "cdsco_web"], "per-row licence column"),
     "price_unit_obs":       (["kaggle_nc", "mfr_lists", "drugsetu"], "per-row licence column; mfr rows are sellable"),
     "linker_runs":          (["drugden"], "run log"),
+    "launch_signals":       (["cdsco_web", "cdci", "gazette", "drugden"], "per-row licence column"),
 }
 
 

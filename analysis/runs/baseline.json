@@ -1,6 +1,6 @@
 {
  "db": "D:/pharmacopy/tmp/live.duckdb",
- "at": "2026-11-02T23:31:11",
+ "at": "2026-11-02T23:56:42",
  "coverage": {
   "brand_registry -> molecule": {
    "n": 90464,
@@ -37,13 +37,18 @@
    "linked": 0,
    "pct": 0.0
   },
-  "product -> US patent/exclusivity (same set, live)": {
+  "product -> live US patent/exclusivity (same set)": {
    "n": 535507,
    "linked": 0,
    "pct": 0.0
   },
   "product -> EMA (same set)": {
    "n": 535507,
+   "linked": 0,
+   "pct": 0.0
+  },
+  "molecule -> US Orange Book (single-ingredient set)": {
+   "n": 5006,
    "linked": 0,
    "pct": 0.0
   },
@@ -62,7 +67,7 @@
    "linked": 31,
    "pct": 1.3
   },
-  "event -> combo": {
+  "event -> ingredient_set": {
    "n": 2435,
    "linked": 0,
    "pct": 0.0
@@ -106,6 +111,16 @@
    "n": 39,
    "linked": 37,
    "pct": 94.9
+  },
+  "molecule -> dated India launch signal (high)": {
+   "n": 5006,
+   "linked": 0,
+   "pct": 0.0
+  },
+  "molecule -> any dated launch signal (incl. inferred)": {
+   "n": 5006,
+   "linked": 0,
+   "pct": 0.0
   },
   "company -> group (curated)": {
    "n": 15680,

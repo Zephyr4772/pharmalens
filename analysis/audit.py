@@ -23,7 +23,8 @@ def main(path: str, out: str | None = None) -> dict:
     tables = {r[0] for r in c.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'").fetchall()}
     for t, ddl in [("entity_links", "linker VARCHAR, src_table VARCHAR, src_key VARCHAR, dst_type VARCHAR, dst_id VARCHAR, method VARCHAR, confidence DOUBLE"),
                    ("event_entities", "event_id BIGINT, entity_type VARCHAR, entity_id VARCHAR, method VARCHAR, confidence DOUBLE"),
-                   ("price_unit_obs", "product_id INTEGER, observed_on DATE, source VARCHAR, unit_price DOUBLE, comparable BOOLEAN, confidence DOUBLE")]:
+                   ("price_unit_obs", "product_id INTEGER, observed_on DATE, source VARCHAR, unit_price DOUBLE, comparable BOOLEAN, confidence DOUBLE"),
+                   ("launch_signals", "kind VARCHAR, dated_on DATE, company_id INTEGER, ingredient_set VARCHAR, confidence DOUBLE")]:
         if t not in tables:   # absent before Phase 1: an empty stand-in keeps every query valid
             c.execute(f"CREATE TEMP TABLE {t} ({ddl})")
     has_group_kind = "group_kind" in {r[0] for r in c.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'parents'").fetchall()}
@@ -113,6 +114,10 @@ def main(path: str, out: str | None = None) -> dict:
     cov("brand_first_seen -> company", "brand_first_seen", f"company_id IS NOT NULL OR {linkcond('brand_first_seen', 'source || chr(124) || key', 'company')}")
     cov("brand_first_seen (post-baseline) -> company", "brand_first_seen",
         f"company_id IS NOT NULL OR {linkcond('brand_first_seen', 'source || chr(124) || key', 'company')}", "NOT baseline")
+    cov("molecule -> dated India launch signal (high)", "molecules m",
+        f"EXISTS (SELECT 1 FROM launch_signals l WHERE l.confidence >= {HIGH} AND list_contains(string_split(l.ingredient_set, ','), CAST(m.id AS VARCHAR)))")
+    cov("molecule -> any dated launch signal (incl. inferred)", "molecules m",
+        "EXISTS (SELECT 1 FROM launch_signals l WHERE list_contains(string_split(l.ingredient_set, ','), CAST(m.id AS VARCHAR)))")
     cov("company -> group (curated)", "companies", "parent_id IS NOT NULL")
     if has_group_kind:
         cov("company -> group (curated or auto)", "companies c",
@@ -154,9 +159,9 @@ def main(path: str, out: str | None = None) -> dict:
     c.execute(f"""CREATE TEMP TABLE sec2 AS SELECT id, meeting_date, sortset(molecule_ids) s FROM sec_items
                   WHERE meeting_date >= DATE '2024-01-01'""")
     c.execute(f"""CREATE TEMP TABLE brset AS SELECT DISTINCT s FROM molset WHERE src_table = 'brand_registry'""")
-    c.execute(f"""CREATE TEMP TABLE launchset AS SELECT m.s, min(b.first_seen) first_seen FROM molset m
-                  JOIN brand_first_seen b ON m.src_table = 'brand_first_seen' AND m.src_key = b.source || '|' || b.key
-                  WHERE NOT b.baseline GROUP BY 1""")
+    # dated launch signals (#5): registry arrivals and NPPA launch prices are high-confidence; CDCI record dates are not
+    c.execute(f"""CREATE TEMP TABLE launchset AS SELECT ingredient_set s, min(dated_on) first_seen FROM launch_signals
+                  WHERE confidence >= {HIGH} AND ingredient_set IS NOT NULL GROUP BY 1""")
     r = one("""SELECT count(*), count(*) FILTER (WHERE s IS NOT NULL),
         count(*) FILTER (WHERE s IS NOT NULL AND EXISTS (SELECT 1 FROM reg_approvals a WHERE sortset(a.molecule_ids) = sec2.s AND a.approved_on >= sec2.meeting_date)),
         count(*) FILTER (WHERE s IS NOT NULL AND s IN (SELECT s FROM brset)),
@@ -200,11 +205,9 @@ def main(path: str, out: str | None = None) -> dict:
         SELECT count(*),
           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM us_orange_book o WHERE o.app_type = 'A' AND list_contains(string_split(o.molecule_ids, ','), CAST(pm.mid AS VARCHAR)))),
           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM product_molecules x WHERE x.molecule_id = pm.mid)),
-          count(*) FILTER (WHERE EXISTS (SELECT 1 FROM hl JOIN brand_first_seen b ON hl.src_table = 'brand_first_seen' AND hl.src_key = b.source || '|' || b.key
-                                         WHERE hl.dst_type = 'molecule' AND hl.dst_id = CAST(pm.mid AS VARCHAR) AND NOT b.baseline)),
+          count(*) FILTER (WHERE EXISTS (SELECT 1 FROM launchset WHERE list_contains(string_split(launchset.s, ','), CAST(pm.mid AS VARCHAR)))),
           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM us_orange_book o WHERE o.app_type = 'A' AND list_contains(string_split(o.molecule_ids, ','), CAST(pm.mid AS VARCHAR)))
-            AND EXISTS (SELECT 1 FROM hl JOIN brand_first_seen b ON hl.src_table = 'brand_first_seen' AND hl.src_key = b.source || '|' || b.key
-                        WHERE hl.dst_type = 'molecule' AND hl.dst_id = CAST(pm.mid AS VARCHAR) AND NOT b.baseline))
+            AND EXISTS (SELECT 1 FROM launchset WHERE list_contains(string_split(launchset.s, ','), CAST(pm.mid AS VARCHAR))))
         FROM pm""")
     P["P5 Patent"] = dict(zip(["start (molecules with live US patents)", "US ANDA generics", "India products", "dated India launch", "all hops"], r))
 

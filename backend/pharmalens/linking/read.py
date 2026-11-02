@@ -114,3 +114,24 @@ def bans_for_combo(combo_id: int) -> list[dict]:
                  FROM entity_links l JOIN reg_banned_fdc b ON CAST(b.id AS VARCHAR) = l.src_key
                  WHERE l.linker = 'bans:combo' AND l.dst_type = 'combo' AND l.dst_id = ? ORDER BY l.confidence DESC, b.notified_on DESC""",
               [str(combo_id)])
+
+
+def launches(molecule: int | None = None, company: int | None = None, limit: int = 80) -> list[dict]:
+    """Dated launch signals (#5) for a molecule (any ingredient set containing it) or a company."""
+    if molecule is not None:
+        where, args = "list_contains(string_split(l.ingredient_set, ','), ?)", [str(molecule)]
+    elif company is not None:
+        where, args = "l.company_id = ?", [company]
+    else:
+        return []
+    rows = _q(f"""SELECT l.kind, l.dated_on, l.brand, l.company_id, c.name AS company, c.slug AS company_slug, l.ingredient_set,
+                         l.method, l.confidence, l.evidence
+                  FROM launch_signals l LEFT JOIN companies c ON c.id = l.company_id
+                  WHERE {where} ORDER BY l.dated_on DESC NULLS LAST LIMIT {int(limit)}""", args)
+    names = {}
+    ids = {i for r in rows for i in (r["ingredient_set"] or "").split(",") if i}
+    if ids:
+        names = dict(db.cursor().execute(f"SELECT CAST(id AS VARCHAR), name FROM molecules WHERE id IN ({','.join(ids)})").fetchall())
+    for r in rows:
+        r["ingredients"] = " + ".join(names.get(i, i) for i in (r["ingredient_set"] or "").split(",") if i) or None
+    return rows

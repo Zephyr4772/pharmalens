@@ -124,3 +124,22 @@ export function BanLinks({ rows }: { rows: Row[] | undefined }) {
     </Panel>
   );
 }
+
+const LAUNCH_KIND: Record<string, string> = { registry_arrival: "NEW BRAND", nppa_launch_price: "NPPA PRICE", cdci_record_date: "CDCI DATE" };
+
+// Dated launch signals (Phase 1 #5): new brand registrations, NPPA new-drug prices, CDCI record dates (inferred).
+export function LaunchSignals({ rows, showCompany = true }: { rows: Row[] | undefined; showCompany?: boolean }) {
+  const { toggle, keep } = useShowInferred();
+  const shown = keep(rows);
+  if (!rows?.length) return null;
+  return (
+    <Panel title="Launch signals" sub="dated evidence of products coming to market: new 84AB brand registrations, NPPA new-drug retail prices; CDCI record dates are inferred (added or updated by)" className="tall" right={toggle}>
+      {shown.length ? <table className="tt"><tbody>{shown.map((l, i) => <tr key={i}>
+        <td>{day(l.dated_on)}</td><td><span className="badge b-info">{LAUNCH_KIND[l.kind] ?? l.kind}</span></td>
+        <td>{l.brand ?? ""}</td><td className="mut" title={l.evidence}>{l.ingredients ?? "ingredients not fully resolved"}</td>
+        {showCompany && <td>{l.company_slug ? <Link to={`/co/${l.company_slug}`}>{l.company}</Link> : <span className="faint">—</span>}</td>}
+        <td><Inferred r={l} /></td></tr>)}</tbody></table>
+        : <div className="empty">only inferred signals: tick “show inferred”</div>}
+    </Panel>
+  );
+}
