@@ -14,6 +14,6 @@ mkdir -p "$TMP"
 git archive --format=tar --prefix=app/ HEAD -o "$TMP/app.tar"
 tar -rf "$TMP/app.tar" --transform 's,^web,app/web,' web/dist
 scp -q -i "$KEY" "$TMP/app.tar" "$HOST:/srv/pharmalens/app.tar"
-ssh -i "$KEY" "$HOST" 'cd /srv/pharmalens && rm -rf app && tar -xf app.tar && rm app.tar && cp app/deploy/docker-compose.yml . \
+ssh -i "$KEY" "$HOST" 'set -o pipefail; cd /srv/pharmalens && rm -rf app && tar -xf app.tar && rm app.tar && cp app/deploy/docker-compose.yml . \
   && docker compose up -d --build 2>&1 | tail -1 && sleep 25 && curl -s http://127.0.0.1:8010/api/v1/healthz'
 echo
