@@ -44,6 +44,9 @@ def inr(x) -> str:
 # ------------------------------------------------------------------ /help
 COMMANDS = [
     ("brief", "briefing now: what happened and why it matters"),
+    ("watch", "follow a company, molecule or brand: alerts come here"),
+    ("watchlist", "what you follow, with remove buttons"),
+    ("unwatch", "stop following something"),
     ("check", "check a medicine: bans, failed batches, price, cheaper options"),
     ("company", "company snapshot: quality, US FDA, news, share price"),
     ("fin", "financials: quarterly results, margins, valuation, next results date"),
@@ -605,13 +608,84 @@ def results(_: str = "") -> list[Reply]:
     return [Reply("\n".join(lines))]
 
 
+# ------------------------------------------------------------------ watchlist (shared with the terminal's stars)
+def _watch_target(arg: str) -> tuple[str, str, str] | None:
+    """(key, label, href) for a name: a group, company or molecule from the name index, else a catalog product."""
+    from . import names
+    cur = db.cursor()
+    for e in names.resolve(arg, types=("group", "company", "molecule"), limit=3):
+        if e["type"] == "group":
+            r = cur.execute("SELECT slug, name FROM parents WHERE id = ?", [e["id"]]).fetchone()
+            if r:
+                return f"g:{r[0]}", r[1], f"/g/{r[0]}"
+        elif e["type"] == "company":
+            r = cur.execute("SELECT slug, name FROM companies WHERE id = ?", [e["id"]]).fetchone()
+            if r:
+                return f"co:{r[0]}", r[1], f"/co/{r[0]}"
+        else:
+            return f"m:{e['id']}", e["name"], f"/m/{e['id']}"
+    from ..api.routers.catalog import search
+    hits = (search(q=arg, limit=1) or {}).get("products") or []
+    if hits:
+        return f"p:{hits[0]['id']}", hits[0]["name"], f"/p/{hits[0]['id']}"
+    return None
+
+
+def watch(arg: str) -> list[Reply]:
+    from .. import watchlist as wl
+    if not arg.strip():
+        return watchlist_cmd()
+    t = _watch_target(arg)
+    if not t:
+        return [Reply(f"Couldn't place '{arg}'. Try a company, ticker, molecule or brand.")]
+    key, label, href = t
+    added = wl.add(wl.owner_login(), key, label, href)
+    kind = {"g": "group", "co": "company", "m": "molecule", "p": "product", "c": "combination"}[key.split(":")[0]]
+    what = {"group": "filings, results, US FDA actions, failed batches, approvals, trials, price notices and big share moves",
+            "company": "failed batches, bans, approvals and filings", "molecule": "failed batches, bans, price notices and approvals",
+            "product": "bans, failed batches and price notices", "combination": "bans and price notices"}[kind]
+    head = f"Watching **{label}** ({kind})." if added else f"Already watching **{label}**."
+    buttons = [[cb("Unwatch", f"unwatch:{key}"), cb("Watchlist", "watchlist")]]
+    if kind == "group":
+        gid = db.cursor().execute("SELECT id FROM parents WHERE slug = ?", [key[2:]]).fetchone()[0]
+        buttons.insert(0, [cb("Sanity check", f"sanity:{gid}"), cb("Financials", f"fin:{gid}")])
+    return [Reply(f"{head} I'll ping you on {what}. Same list as the terminal's stars.", buttons)]
+
+
+def unwatch(arg: str) -> list[Reply]:
+    from .. import watchlist as wl
+    a = arg.strip()
+    if not a:
+        return watchlist_cmd()
+    if re.fullmatch(r"(g|co|m|c|p):\S+", a):
+        key = a
+    else:
+        t = _watch_target(a)
+        key = t[0] if t else None
+    if not key:
+        return [Reply(f"'{a}' isn't on the watchlist.")]
+    gone = wl.remove(wl.owner_login(), key)
+    return [Reply("Removed from the watchlist." if gone else "That wasn't on the watchlist.", [[cb("Watchlist", "watchlist")]])]
+
+
+def watchlist_cmd(_: str = "") -> list[Reply]:
+    from .. import watchlist as wl
+    rows = wl.items(wl.owner_login())
+    if not rows:
+        return [Reply("Watchlist is empty. Add something: `/watch sun`, `/watch dolo 650`, or star it in the terminal.")]
+    icon = {"g": "🏢", "co": "🏭", "m": "🧪", "c": "💊", "p": "💊"}
+    lines = [f"**Watchlist** ({len(rows)})"] + [f"{icon.get(r['key'].split(':')[0], '•')} {r['label']}" for r in rows]
+    buttons = [[cb(f"✕ {r['label'][:24]}", f"unwatch:{r['key']}")] for r in rows[:12]]
+    return [Reply("\n".join(lines) + "\nAlerts for these go to this chat.", buttons + [[link("Open in terminal", "/watch")]])]
+
+
 # ------------------------------------------------------------------ routing
 HANDLERS = {"help": help_, "start": help_, "brief": brief, "check": check, "company": company, "chart": chart,
             "export": export, "feeds": feeds, "status": status, "fin": fin, "sanity": sanity, "compare": compare,
-            "leaders": leaders, "results": results}
+            "leaders": leaders, "results": results, "watch": watch, "unwatch": unwatch, "watchlist": watchlist_cmd}
 CALLBACKS = {"brief": lambda a: brief(a), "check": lambda a: product_card(int(a)), "cheap": cheap, "chart": chart_cb,
              "news": news_for, "feeds": feeds, "run": run_ask, "runyes": run_yes, "events": events,
-             "fin": fin, "sanity": sanity, "flags": flags_for,
+             "fin": fin, "sanity": sanity, "flags": flags_for, "unwatch": unwatch, "watchlist": watchlist_cmd,
              "noop": lambda a: [Reply("Fine. Nothing touched.")]}
 
 

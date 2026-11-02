@@ -8,6 +8,7 @@ import { NavRail, NAV } from "./components/NavRail";
 import { StatusBar } from "./components/StatusBar";
 import { CommandPalette } from "./components/CommandPalette";
 import { connectStream } from "./state/live";
+import { useWatchlist } from "./state/watchlist";
 
 import Market from "./screens/Market";
 import Regulatory from "./screens/Regulatory";
@@ -51,6 +52,7 @@ function GlobalKeys() {
 function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(() => {
+    useWatchlist.getState().load();   // the server's watchlist (shared with Specs and alerts)
     connectStream(
       () => qc.invalidateQueries({ queryKey: ["quotes"] }),
       () => {

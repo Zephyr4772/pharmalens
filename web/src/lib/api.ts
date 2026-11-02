@@ -33,7 +33,17 @@ export async function post<T = any>(path: string, body: unknown): Promise<T> {
   return r.json();
 }
 
-export const csvUrl = (path: string, params?: Record<string, unknown>) => `${BASE}${path}${qs({ ...params, format: "csv" })}`;
+export async function send<T = any>(method: "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+  const r = await fetch(`${BASE}${path}`, {
+    method,
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${(await r.text()).slice(0, 200)}`);
+  return r.json();
+}
+
+export const csvUrl =(path: string, params?: Record<string, unknown>) => `${BASE}${path}${qs({ ...params, format: "csv" })}`;
 
 // ---------- formatting
 export const inr = (n: number | null | undefined, dash = "—") =>

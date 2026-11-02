@@ -269,6 +269,15 @@ CREATE TABLE IF NOT EXISTS results_calendar (   -- board meetings announced to N
     PRIMARY KEY (symbol, meeting_date, purpose)
 );
 
+CREATE TABLE IF NOT EXISTS watchlist (   -- one watchlist per user (Tailscale login), shared by terminal, Specs and alerts
+    owner     VARCHAR,
+    key       VARCHAR,                   -- g:<group slug> | co:<company slug> | m:<molecule id> | c:<combo id> | p:<product id>
+    label     VARCHAR,
+    href      VARCHAR,
+    added_at  TIMESTAMP,
+    PRIMARY KEY (owner, key)
+);
+
 CREATE SEQUENCE IF NOT EXISTS seq_docs START 1;
 CREATE TABLE IF NOT EXISTS reg_documents (   -- regulator notices/circulars/gazette/price orders
     id           BIGINT DEFAULT nextval('seq_docs') PRIMARY KEY,
