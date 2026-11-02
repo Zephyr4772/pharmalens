@@ -49,8 +49,11 @@ def main(db, item, what, n=50):
         for pid, pn, src, d, mrp, pt, pq, pb, up, cmp_, m, cf, note, lic in rows:
             lines.append(f"| {pid} {pn[:40]} | {src} | {d} | {mrp} | {(pt or '')[:30]} | {pq} | {pb} | {up if up is None else round(up, 3)} | {cmp_} | {m} | {cf:.2f} | {(note or '')[:80]} |")
     else:
-        rows = c.execute(f"""SELECT linker, src_table, src_key, dst_type, dst_id, method, confidence, licence, evidence FROM entity_links
-                             WHERE linker LIKE ? ORDER BY random() LIMIT {n}""", [what + "%"]).fetchall()
+        prefixes = what.split(",")          # several linkers: n is split evenly between them
+        rows = []
+        for pf in prefixes:
+            rows += c.execute(f"""SELECT linker, src_table, src_key, dst_type, dst_id, method, confidence, licence, evidence FROM entity_links
+                                  WHERE linker LIKE ? ORDER BY random() LIMIT {max(1, n // len(prefixes))}""", [pf + "%"]).fetchall()
         lines += ["| record | → entity | method | conf | licence | evidence |", "|---|---|---|---|---|---|"]
         for lk, st, sk, dt, di, m, cf, lic, ev in rows:
             lines.append(f"| {st}: `{sk[:50]}` | {dt}: {name(c, dt, di)} | {m} | {cf:.2f} | {lic} | {(ev or '').replace('|', '/')[:160]} |")

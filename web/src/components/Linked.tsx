@@ -54,3 +54,38 @@ export function MoleculeLinks({ links }: { links: Row | undefined }) {
     </Panel>
   );
 }
+
+// US and EU status of an exact ingredient set: Orange Book (NDA / ANDA), live patents and exclusivities, EMA.
+export function UsEuStatus({ s, what }: { s: Row | null | undefined; what: string }) {
+  const [tab, setTab] = useState<"ob" | "pat" | "ema">("ob");
+  if (!s) return null;
+  const m = s.summary;
+  return (
+    <Panel title="US & EU status" sub={`records with exactly the same ingredients as this ${what} (any strength or form) · matched on the full ingredient set`}
+      right={<Tabs value={tab} onChange={setTab} tabs={[["ob", `Orange Book ${s.orange_book.length}`], ["pat", `patents & excl. ${s.patents.length}`], ["ema", `EMA ${s.ema.length}`]]} />}>
+      <div className="chips" style={{ marginBottom: 6 }}>
+        <span className="chip">{m.nda} NDA ({m.nda_marketed} marketed)</span>
+        <span className="chip">{m.anda} ANDA generics ({m.anda_marketed} marketed)</span>
+        {m.first_generic && <span className="chip">first US generic {day(m.first_generic)}</span>}
+        {m.reference_brands?.length > 0 && <span className="chip">reference: {m.reference_brands.join(", ")}</span>}
+        <span className={`chip ${m.protection_until ? "chip-on" : ""}`}>{m.patents_live} live patents · {m.exclusivities_live} exclusivities{m.protection_until ? ` · last expiry ${day(m.protection_until)}` : ""}</span>
+        <span className="chip">{m.ema ? `${m.ema} EU authorisation${m.ema > 1 ? "s" : ""}` : "no EU central authorisation"}</span>
+      </div>
+      {m.indian_groups?.length > 0 && <div className="faint" style={{ marginBottom: 6 }}>US generics held by tracked Indian groups: {m.indian_groups.join(", ")}</div>}
+      {tab === "ob" && (s.orange_book.length ? <table className="tt"><thead><tr><th>Appl.</th><th>Type</th><th>Brand</th><th>Strength</th><th>Form</th><th>Holder</th><th>Approved</th><th>Status</th><th /></tr></thead><tbody>
+        {s.orange_book.map((o: Row) => <tr key={`${o.application_number}-${o.product_number}`}><td className="mut">{o.application_number}</td>
+          <td>{o.app_type === "N" ? <span className="badge b-info">NDA{o.rld ? " RLD" : ""}</span> : "ANDA"}</td><td>{o.brand}</td><td className="faint">{o.strengths}</td>
+          <td className="faint">{o.dosage_form}</td><td>{o.parent_slug ? <Link to={`/g/${o.parent_slug}`}>{o.applicant}</Link> : o.applicant}</td>
+          <td>{day(o.approval_date)}</td><td className="mut">{o.marketing_status}</td><td><Inferred r={o} /></td></tr>)}</tbody></table>
+        : <div className="empty">no Orange Book product with exactly these ingredients</div>)}
+      {tab === "pat" && (s.patents.length ? <table className="tt"><thead><tr><th>Appl.</th><th>Kind</th><th>Number / code</th><th>Use</th><th>Expires</th></tr></thead><tbody>
+        {s.patents.map((p: Row, i: number) => <tr key={i}><td className="mut">{p.application_number}/{p.product_number}</td><td>{p.kind}</td><td>{p.code}</td>
+          <td className="faint">{p.use_code}</td><td className="amb">{day(p.expires_on)}</td></tr>)}</tbody></table>
+        : <div className="empty">no live US patents or exclusivities</div>)}
+      {tab === "ema" && (s.ema.length ? <table className="tt"><tbody>{s.ema.map((e: Row) => <tr key={e.ema_product_number}><td>{e.name_of_medicine}</td>
+        <td className="mut">{e.medicine_status}</td><td className="faint">{e.holder}</td><td>{e.generic === "Yes" ? "generic" : e.biosimilar === "Yes" ? "biosimilar" : ""}</td>
+        <td>{day(e.marketing_authorisation_date)}</td><td><Inferred r={e} /></td></tr>)}</tbody></table>
+        : <div className="empty">no EU centralised authorisation with these ingredients</div>)}
+    </Panel>
+  );
+}

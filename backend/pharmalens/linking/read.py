@@ -46,3 +46,49 @@ def for_molecule(mid: int) -> dict:
                           WHERE NOT list_contains(string_split(coalesce(r.molecule_ids, ''), ','), ?)
                           ORDER BY r.rate LIMIT 40""", [k, k]),
     }
+
+
+def set_of_combo(combo_id: int | None) -> str | None:
+    if combo_id is None:
+        return None
+    r = _q("""SELECT dst_id, 1.0 confidence FROM entity_links WHERE src_table = 'combos' AND src_key = ? AND dst_type = 'ingredient_set'""",
+           [str(combo_id)])
+    return r[0]["dst_id"] if r else None
+
+
+def us_eu_status(ingredient_set: str | None) -> dict | None:
+    """US (Orange Book, patents, exclusivities) and EU (EMA) records with exactly this ingredient set."""
+    if not ingredient_set:
+        return None
+    ob = _q("""SELECT o.application_number, o.product_number, o.brand, o.ingredients, o.strengths, o.dosage_form, o.app_type, o.rld,
+                      o.marketing_status, o.approval_date, o.applicant, pa.name AS parent, pa.slug AS parent_slug, l.method, l.confidence, l.evidence
+               FROM entity_links l JOIN us_orange_book o ON o.application_number || '|' || o.product_number = l.src_key
+               LEFT JOIN parents pa ON pa.id = o.parent_id
+               WHERE l.src_table = 'us_orange_book' AND l.dst_type = 'ingredient_set' AND l.dst_id = ?
+               ORDER BY o.approval_date DESC NULLS LAST""", [ingredient_set])
+    keys = {(r["application_number"], r["product_number"]) for r in ob}
+    pats = [p for p in _q("""SELECT application_number, product_number, kind, code, use_code, expires_on, 0.95 confidence FROM us_patents
+                             WHERE application_number IN (SELECT unnest(string_split(?, ',')))
+                             AND (expires_on IS NULL OR expires_on >= current_date) ORDER BY expires_on NULLS LAST""",
+                          [",".join(sorted({a for a, _ in keys}))]) if (p["application_number"], p["product_number"]) in keys]
+    ema = _q("""SELECT e.ema_product_number, e.name_of_medicine, e.medicine_status, e.generic, e.biosimilar,
+                       e.marketing_authorisation_developer_applicant_holder AS holder, e.marketing_authorisation_date, l.method, l.confidence, l.evidence
+                FROM entity_links l JOIN ema_medicines e ON e.ema_product_number = l.src_key
+                WHERE l.src_table = 'ema_medicines' AND l.dst_type = 'ingredient_set' AND l.dst_id = ?
+                ORDER BY e.marketing_authorisation_date DESC NULLS LAST""", [ingredient_set])
+    anda = [r for r in ob if r["app_type"] == "A"]
+    nda = [r for r in ob if r["app_type"] == "N"]
+    live = lambda rows: [r for r in rows if (r["marketing_status"] or "").upper() != "DISCONTINUED"]  # noqa: E731
+    dated = sorted(p["expires_on"] for p in pats if p["expires_on"])
+    return {
+        "ingredient_set": ingredient_set,
+        "summary": {"nda": len(nda), "anda": len(anda), "anda_marketed": len(live(anda)), "nda_marketed": len(live(nda)),
+                    "first_generic": min((r["approval_date"] for r in anda if r["approval_date"]), default=None),
+                    "reference_brands": sorted({r["brand"] for r in nda if r["rld"]} or {r["brand"] for r in nda})[:6],
+                    "indian_groups": sorted({r["parent"] for r in anda if r["parent"]}),
+                    "patents_live": sum(1 for p in pats if p["kind"] == "patent"),
+                    "exclusivities_live": sum(1 for p in pats if p["kind"] != "patent"),
+                    "protection_until": dated[-1] if dated else None, "next_expiry": dated[0] if dated else None,
+                    "ema": len(ema)},
+        "orange_book": ob[:40], "patents": pats[:40], "ema": ema[:20],
+    }

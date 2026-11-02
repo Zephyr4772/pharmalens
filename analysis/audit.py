@@ -73,12 +73,19 @@ def main(path: str, out: str | None = None) -> dict:
 
     # ---- #6 US / EU status reachable from a product (exact ingredient set)
     act = "NOT coalesce(is_discontinued, false) AND lower(name) NOT LIKE 'lorem%'"
+    c.execute("""CREATE TEMP TABLE pset AS SELECT DISTINCT dst_id s, CAST(src_key AS INTEGER) combo_id FROM hl
+                 WHERE src_table = 'combos' AND dst_type = 'ingredient_set'""")
+    c.execute("""CREATE TEMP TABLE obset AS SELECT DISTINCT l.dst_id s, o.application_number, o.product_number FROM hl l
+                 JOIN us_orange_book o ON o.application_number || '|' || o.product_number = l.src_key
+                 WHERE l.src_table = 'us_orange_book' AND l.dst_type = 'ingredient_set'""")
     cov("product -> US Orange Book (same ingredient set)", "products p",
-        "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'combos' AND hl.src_key = CAST(p.combo_id AS VARCHAR) AND hl.dst_type = 'us_ob_product')", act)
-    cov("product -> US patent/exclusivity (same set, live)", "products p",
-        "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'combos' AND hl.src_key = CAST(p.combo_id AS VARCHAR) AND hl.dst_type = 'us_patent')", act)
+        "EXISTS (SELECT 1 FROM pset JOIN obset USING (s) WHERE pset.combo_id = p.combo_id)", act)
+    cov("product -> live US patent/exclusivity (same set)", "products p",
+        """EXISTS (SELECT 1 FROM pset JOIN obset USING (s) JOIN us_patents u ON u.application_number = obset.application_number
+                   AND u.product_number = obset.product_number WHERE pset.combo_id = p.combo_id AND (u.expires_on IS NULL OR u.expires_on >= current_date))""", act)
     cov("product -> EMA (same set)", "products p",
-        "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'combos' AND hl.src_key = CAST(p.combo_id AS VARCHAR) AND hl.dst_type = 'ema_medicine')", act)
+        "EXISTS (SELECT 1 FROM pset JOIN hl e ON e.dst_id = pset.s AND e.src_table = 'ema_medicines' WHERE pset.combo_id = p.combo_id)", act)
+    cov("molecule -> US Orange Book (single-ingredient set)", "molecules m", "EXISTS (SELECT 1 FROM obset WHERE obset.s = CAST(m.id AS VARCHAR))")
 
     # ---- #9 events with entities
     cov("event -> any entity", "events e", "e.entity_type IS NOT NULL OR EXISTS (SELECT 1 FROM event_entities x WHERE x.event_id = e.id AND x.confidence >= 0.85)")

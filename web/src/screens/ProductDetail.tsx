@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { BrandRegistry, MoleculeReference, NppaNotified, Pharmacology, Procurement } from "../components/Depth";
+import { UsEuStatus } from "../components/Linked";
 import { Link, useParams } from "react-router-dom";
 import { day, get, inr, num, type Row } from "../lib/api";
 import { ErrorBox, Kpi, Loading, Panel, Star } from "../components/ui";
@@ -214,6 +215,7 @@ export default function ProductDetail() {
         <BrandRegistry rows={d.brand_registry} />
       </div>
       {d.pharmacology && <Pharmacology e={d.pharmacology} />}
+      <UsEuStatus s={d.us_eu} what="product" />
     </div>
   );
 }

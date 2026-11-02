@@ -291,6 +291,8 @@ def product(pid: int):
         p["procurement"] = []
     p["pharmacology"] = enrichment(cur, mids[0]) if len(mids) == 1 else None
     p["molecule_reference"] = molecule_reference(cur, mids, p.get("dosage_form")) if not info else None
+    from ...linking.read import set_of_combo, us_eu_status
+    p["us_eu"] = us_eu_status(set_of_combo(p.get("combo_id")))   # US / EU records with exactly this ingredient set
     return cleanrows([p])[0]
 
 
@@ -499,6 +501,8 @@ def molecule(mid: int):
                                        [f"%{m['name']}%"]) or [None])[0]
     from ...linking.read import for_molecule
     m["links"] = for_molecule(mid)      # derived links (Phase 1): each row has method, confidence and `inferred`
+    from ...linking.read import us_eu_status
+    m["us_eu"] = us_eu_status(str(mid))  # single-ingredient US / EU records (combinations are on product pages)
     return cleanrows([m])[0]
 
 
