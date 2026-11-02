@@ -17,6 +17,8 @@ from .store import licence_of, replace
 def run() -> dict:
     cur = db.cursor()
     idx = _index()
+    from .hygiene import canon_map
+    cmap = canon_map()
     sets: dict[str, list[str]] = {}
     for cid, st in cur.execute("SELECT src_key, dst_id FROM entity_links WHERE linker = 'global:combo_sets'").fetchall():
         sets.setdefault(st, []).append(cid)
@@ -26,7 +28,7 @@ def run() -> dict:
         found = [f for f in resolve(text or "", True, idx) if f[1] in ("complete", "partial")]
         if not found:
             continue
-        ids = sorted({str(f[0]) for f in found}, key=int)
+        ids = sorted({str(cmap.get(f[0], f[0])) for f in found}, key=int)
         complete = all(f[1] == "complete" for f in found)
         ev = f"“{text}” ({status}, {notif or 'notification n/a'}) resolved to " + " + ".join(f[3].split("'")[1] for f in found)
         if len(ids) == 1:

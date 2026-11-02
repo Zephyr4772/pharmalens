@@ -129,6 +129,8 @@ def resolve(text: str, structured: bool, idx) -> list[tuple[int, str, float, str
 
 
 def _run(linker: str, table: str, rows, structured: bool, idx, prefix: str = "") -> dict:
+    from .hygiene import canon_map
+    cmap = canon_map()                  # molecule hygiene: point at the canonical molecule, say so in the method
     cache: dict[str, list] = {}
     links = []
     lic = licence_of(table, "molecules")
@@ -138,8 +140,10 @@ def _run(linker: str, table: str, rows, structured: bool, idx, prefix: str = "")
         if text not in cache:
             cache[text] = resolve(text, structured, idx)
         for mid, method, conf, ev in cache[text]:
-            links.append({"src_table": table, "src_key": f"{prefix}{key}", "dst_type": "molecule", "dst_id": mid,
-                          "method": f"dict_{method}", "confidence": conf, "evidence": ev, "licence": lic})
+            c = cmap.get(mid, mid)
+            links.append({"src_table": table, "src_key": f"{prefix}{key}", "dst_type": "molecule", "dst_id": c,
+                          "method": f"dict_{method}" + ("+alias" if c != mid else ""), "confidence": conf,
+                          "evidence": ev + (f" (alias {mid} folded into {c})" if c != mid else ""), "licence": lic})
     return replace(linker, links, note=f"{len(cache):,} distinct texts")
 
 

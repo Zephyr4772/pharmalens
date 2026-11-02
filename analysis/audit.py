@@ -25,7 +25,8 @@ def main(path: str, out: str | None = None) -> dict:
     for t, ddl in [("entity_links", "linker VARCHAR, src_table VARCHAR, src_key VARCHAR, dst_type VARCHAR, dst_id VARCHAR, method VARCHAR, confidence DOUBLE"),
                    ("event_entities", "event_id BIGINT, entity_type VARCHAR, entity_id VARCHAR, method VARCHAR, confidence DOUBLE"),
                    ("price_unit_obs", "product_id INTEGER, observed_on DATE, source VARCHAR, unit_price DOUBLE, comparable BOOLEAN, confidence DOUBLE"),
-                   ("launch_signals", "kind VARCHAR, dated_on DATE, company_id INTEGER, ingredient_set VARCHAR, confidence DOUBLE")]:
+                   ("launch_signals", "kind VARCHAR, dated_on DATE, company_id INTEGER, ingredient_set VARCHAR, confidence DOUBLE"),
+                   ("molecule_aliases", "alias_id INTEGER, canonical_id INTEGER, method VARCHAR, confidence DOUBLE, applied BOOLEAN")]:
         if t not in tables:   # absent before Phase 1: an empty stand-in keeps every query valid
             c.execute(f"CREATE TEMP TABLE {t} ({ddl})")
     has_group_kind = "group_kind" in {r[0] for r in c.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'parents'").fetchall()}
@@ -42,8 +43,13 @@ def main(path: str, out: str | None = None) -> dict:
     c.execute("""CREATE TEMP VIEW molset AS SELECT src_table, src_key, string_agg(dst_id, ',' ORDER BY CAST(dst_id AS INTEGER)) s
                  FROM hl WHERE dst_type = 'molecule' GROUP BY 1, 2
                  HAVING count(*) FILTER (WHERE method LIKE '%partial%') = 0""")
+    # molecule hygiene: sets compare on canonical ids (the linkers write canonical ids; raw columns are mapped here)
+    c.execute("CREATE TEMP TABLE cmap AS SELECT DISTINCT alias_id, canonical_id FROM molecule_aliases WHERE applied")
+    c.execute("""CREATE TEMP MACRO canon(i) AS coalesce((SELECT canonical_id FROM cmap WHERE alias_id = i), i)""")
     c.execute("""CREATE TEMP MACRO sortset(ids) AS (SELECT string_agg(m, ',' ORDER BY CAST(m AS INTEGER))
-                 FROM (SELECT DISTINCT trim(x) m FROM unnest(string_split(ids, ',')) t(x) WHERE trim(x) <> ''))""")
+                 FROM (SELECT DISTINCT CAST(coalesce(cm.canonical_id, CAST(trim(x) AS INTEGER)) AS VARCHAR) m
+                       FROM unnest(string_split(ids, ',')) t(x) LEFT JOIN cmap cm ON cm.alias_id = TRY_CAST(trim(x) AS INTEGER)
+                       WHERE trim(x) <> '' AND TRY_CAST(trim(x) AS INTEGER) IS NOT NULL))""")
 
     R: dict = {"db": path, "at": datetime.now().isoformat(timespec="seconds"), "coverage": {}, "inferred": {}, "paths": {}}
     C = R["coverage"]
@@ -119,6 +125,16 @@ def main(path: str, out: str | None = None) -> dict:
         f"EXISTS (SELECT 1 FROM launch_signals l WHERE l.confidence >= {HIGH} AND list_contains(string_split(l.ingredient_set, ','), CAST(m.id AS VARCHAR)))")
     cov("molecule -> any dated launch signal (incl. inferred)", "molecules m",
         "EXISTS (SELECT 1 FROM launch_signals l WHERE list_contains(string_split(l.ingredient_set, ','), CAST(m.id AS VARCHAR)))")
+    n_mol = one("SELECT count(*) FROM molecules")[0]
+    folded = one("SELECT count(DISTINCT alias_id) FROM molecule_aliases WHERE applied")[0]
+    pending = one("SELECT count(DISTINCT alias_id) FROM molecule_aliases WHERE NOT applied")[0]
+    C["molecule hygiene: molecule nodes folded into a canonical molecule"] = {"n": n_mol, "linked": folded, "pct": pct(folded, n_mol)}
+    C["molecule hygiene: distinct molecules after folding"] = {"n": n_mol, "linked": n_mol - folded, "pct": pct(n_mol - folded, n_mol)}
+    R["inferred"]["molecule hygiene: alias candidates awaiting review"] = pending
+    cov("product -> molecule with ATC code (via canonical)", "products p",
+        """EXISTS (SELECT 1 FROM product_molecules pm LEFT JOIN cmap cm ON cm.alias_id = pm.molecule_id
+                   JOIN molecule_enrichment e ON e.molecule_id = coalesce(cm.canonical_id, pm.molecule_id)
+                   WHERE pm.product_id = p.id AND e.atc IS NOT NULL)""", act)
     cov("company -> group (curated)", "companies", "parent_id IS NOT NULL")
     cov("company -> group (curated or auto)", "companies c",
         f"parent_id IS NOT NULL OR {linkcond('companies', 'CAST(c.id AS VARCHAR)', 'auto_group')}")
@@ -207,13 +223,18 @@ def main(path: str, out: str | None = None) -> dict:
     P["P4 Tender"] = dict(zip(["start", "molecule", "supplier company", "supplier's product", "supplier quality record", "all hops"], r))
 
     # P5 patent -> molecule -> US generics -> India products -> India launch
-    r = one("""WITH pm AS (SELECT DISTINCT CAST(t.m AS INTEGER) mid FROM us_patents, unnest(string_split(molecule_ids, ',')) t(m)
+    c.execute("""CREATE TEMP TABLE anda_mols AS SELECT DISTINCT coalesce(cm.canonical_id, CAST(t.m AS INTEGER)) mid
+                 FROM us_orange_book o, unnest(string_split(o.molecule_ids, ',')) t(m) LEFT JOIN cmap cm ON cm.alias_id = CAST(t.m AS INTEGER)
+                 WHERE o.app_type = 'A' AND o.molecule_ids IS NOT NULL AND trim(t.m) <> ''""")
+    r = one("""WITH pm AS (SELECT DISTINCT coalesce(cm.canonical_id, CAST(t.m AS INTEGER)) mid FROM us_patents, unnest(string_split(molecule_ids, ',')) t(m)
+                           LEFT JOIN cmap cm ON cm.alias_id = CAST(t.m AS INTEGER)
                            WHERE molecule_ids IS NOT NULL AND expires_on >= current_date)
         SELECT count(*),
-          count(*) FILTER (WHERE EXISTS (SELECT 1 FROM us_orange_book o WHERE o.app_type = 'A' AND list_contains(string_split(o.molecule_ids, ','), CAST(pm.mid AS VARCHAR)))),
-          count(*) FILTER (WHERE EXISTS (SELECT 1 FROM product_molecules x WHERE x.molecule_id = pm.mid)),
+          count(*) FILTER (WHERE pm.mid IN (SELECT mid FROM anda_mols)),
+          count(*) FILTER (WHERE EXISTS (SELECT 1 FROM product_molecules x LEFT JOIN cmap cm ON cm.alias_id = x.molecule_id
+                                         WHERE coalesce(cm.canonical_id, x.molecule_id) = pm.mid)),
           count(*) FILTER (WHERE EXISTS (SELECT 1 FROM launchset WHERE list_contains(string_split(launchset.s, ','), CAST(pm.mid AS VARCHAR)))),
-          count(*) FILTER (WHERE EXISTS (SELECT 1 FROM us_orange_book o WHERE o.app_type = 'A' AND list_contains(string_split(o.molecule_ids, ','), CAST(pm.mid AS VARCHAR)))
+          count(*) FILTER (WHERE pm.mid IN (SELECT mid FROM anda_mols)
             AND EXISTS (SELECT 1 FROM launchset WHERE list_contains(string_split(launchset.s, ','), CAST(pm.mid AS VARCHAR))))
         FROM pm""")
     P["P5 Patent"] = dict(zip(["start (molecules with live US patents)", "US ANDA generics", "India products", "dated India launch", "all hops"], r))

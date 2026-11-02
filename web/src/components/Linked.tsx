@@ -171,3 +171,29 @@ export function CompanyApprovals({ rows }: { rows: Row[] | undefined }) {
     </Panel>
   );
 }
+
+// Molecule hygiene: duplicate / misspelt / brand-glued molecule nodes folded onto one canonical molecule.
+export function MoleculeHygiene({ h }: { h: Row | undefined }) {
+  const { on, toggle } = useShowInferred();
+  if (!h) return null;
+  if (h.canonical) {
+    return (
+      <div className="err" style={{ borderColor: "var(--amber)", color: "inherit" }}>
+        Same molecule as <Link to={`/m/${h.canonical.id}`}>{h.canonical.name}</Link> <Inferred r={h.canonical} />: this page shows only the records
+        filed under this spelling; the derived panels (US & EU status, timeline, launches, linked records) use {h.canonical.name}.
+      </div>
+    );
+  }
+  const pending: Row[] = on ? h.pending ?? [] : [];
+  if (!h.aliases?.length && !h.pending?.length) return null;
+  return (
+    <Panel title="Also listed as" sub="other catalog names folded into this molecule; their NSQ, approval, SEC, trial, news and tender records are included on this page"
+      right={h.pending?.length ? toggle : undefined}>
+      <div className="chips">
+        {h.aliases.map((a: Row) => <span key={a.id} className="chip" title={`${a.method} · ${a.evidence}`}><Link to={`/m/${a.id}`}>{a.name}</Link> <span className="faint">{a.product_count}</span></span>)}
+        {pending.map((a: Row) => <span key={`p${a.id}`} className="chip" title={`${a.method} · ${a.evidence} · awaiting review`}>
+          <Link to={`/m/${a.id}`}>{a.name}</Link> <span className="badge b-mute">REVIEW</span></span>)}
+      </div>
+    </Panel>
+  );
+}

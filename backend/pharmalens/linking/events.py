@@ -33,6 +33,8 @@ def run() -> dict:
     ensure()
     cur = db.cursor()
     idx = _index()
+    from .hygiene import canon_map
+    cmap = canon_map()
     ev = cur.execute("SELECT id, kind, title, entity_type, entity_id, dedupe_key, CAST(payload AS VARCHAR) FROM events").fetchall()
     news = {u: (str(i), p, m) for i, u, p, m in cur.execute("SELECT id, url, parent_ids, molecule_ids FROM news").fetchall()}
     nse = dict(cur.execute("SELECT seq_id, parent_id FROM corp_announcements").fetchall())
@@ -52,6 +54,8 @@ def run() -> dict:
     def add(eid, et, ei, method, conf, evid):
         if ei is None or ei == "":
             return
+        if et == "molecule" and str(ei).strip().isdigit() and int(ei) in cmap:     # molecule hygiene
+            ei, evid = cmap[int(ei)], evid + f" (alias {ei} folded)"
         rows.append({"event_id": eid, "entity_type": et, "entity_id": str(ei), "method": method, "confidence": conf,
                      "evidence": evid[:300], "licence": lic})
 
@@ -60,7 +64,7 @@ def run() -> dict:
         if etype and eidv is not None:
             add(eid, etype, eidv, "event_primary", 1.0, "entity set by the connector")
         pl = json.loads(payload) if payload else {}
-        pl_mols = {str(m) for m in (pl.get("molecule_ids") or [])}
+        pl_mols = {str(cmap.get(int(m), int(m))) for m in (pl.get("molecule_ids") or [])}
         # molecules from the structured product part of the headline
         rx = SEGMENT.get(pre)
         seg = None
@@ -70,7 +74,7 @@ def run() -> dict:
             if seg and pre == "fda":
                 seg = clean_recall(seg)
         found = resolve(seg, True, idx) if seg else []
-        seen = {str(f[0]) for f in found}
+        seen = {str(cmap.get(f[0], f[0])) for f in found}
         for m in pl_mols:
             # connectors sometimes resolved a whole composition (excipients included): ids the headline's product text
             # does not confirm stay inferred
@@ -107,7 +111,7 @@ def run() -> dict:
             add(eid, "molecule", mid, f"product_text_{method}", conf, evid)
         # the whole ingredient set, only when the text resolved completely and agrees with any payload ids
         if found and all(f[1] == "complete" and f[2] >= HIGH for f in found):
-            s = {str(f[0]) for f in found}
+            s = {str(cmap.get(f[0], f[0])) for f in found}
             if not pl_mols or pl_mols <= s:     # extra connector ids (maybe a real active we missed): no set link
                 add(eid, "ingredient_set", ",".join(sorted(s, key=int)), "product_text_complete_set", 0.9,
                     f"all ingredients resolved from “{seg[:120]}”")

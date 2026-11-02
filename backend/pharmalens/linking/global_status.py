@@ -13,13 +13,20 @@ from .. import db
 from .store import licence_of, replace
 
 
+_CMAP: dict[int, int] = {}
+
+
 def _set(ids: str | None) -> str | None:
+    """Sorted canonical molecule ids (molecule hygiene folds aliases), as the ingredient-set key."""
     if not ids:
         return None
-    return ",".join(sorted({x.strip() for x in ids.split(",") if x.strip()}, key=int))
+    return ",".join(sorted({str(_CMAP.get(int(x), int(x))) for x in ids.split(",") if x.strip()}, key=int))
 
 
 def run() -> list[dict]:
+    from .hygiene import canon_map
+    _CMAP.clear()
+    _CMAP.update(canon_map())
     cur = db.cursor()
     # each combination's molecule set (all products of a combination share it)
     combos: dict[str, list[int]] = {}

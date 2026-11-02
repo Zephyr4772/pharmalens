@@ -36,10 +36,13 @@ CREATE TABLE IF NOT EXISTS launch_signals (
 """
 
 
+_CMAP: dict[int, int] = {}
+
+
 def _set(text, idx):
     found = resolve(text or "", True, idx)
     if found and all(f[1] == "complete" and f[2] >= HIGH for f in found):
-        return ",".join(sorted({str(f[0]) for f in found}, key=int))
+        return ",".join(sorted({str(_CMAP.get(f[0], f[0])) for f in found}, key=int))
     return None
 
 
@@ -49,6 +52,9 @@ def run() -> list[dict]:
         w.execute(DDL)
     cur = db.cursor()
     idx = _index()
+    from .hygiene import canon_map
+    _CMAP.clear()
+    _CMAP.update(canon_map())
     matcher._load()
     firm_cache: dict[str, int | None] = {}
 
@@ -69,7 +75,7 @@ def run() -> list[dict]:
         mols = [sub_mol.get(x) for x in subs]
         if not subs or any(m is None for m in mols):
             return None        # a substance we cannot map: the set is not known exactly
-        return ",".join(sorted({str(m) for m in mols}, key=int))
+        return ",".join(sorted({str(_CMAP.get(m, m)) for m in mols}, key=int))
 
     # company links for new-brand sightings
     lic_b = licence_of("brand_first_seen", "companies")

@@ -24,6 +24,11 @@ def has_mol(col: str = "molecule_ids") -> str:
     return f"list_contains(string_split({col}, ','), ?)"
 
 
+def has_any(col: str = "molecule_ids") -> str:
+    """Any of a list of molecule ids (a molecule and its hygiene aliases)."""
+    return f"list_has_any(string_split({col}, ','), ?::VARCHAR[])"
+
+
 def enrichment(cur, mid: int) -> dict | None:
     e = maybe(cur, "SELECT * FROM molecule_enrichment WHERE molecule_id = ?", [mid])
     if not e:
@@ -461,6 +466,12 @@ def molecule(mid: int):
     m = db.one(cur, "SELECT * FROM molecules WHERE id = ?", [mid])
     if not m:
         raise HTTPException(404, "molecule not found")
+    # molecule hygiene: a canonical molecule's page also lists its applied aliases' records (ids in `gids`);
+    # an alias page keeps its own records and says which molecule it is the same as
+    from ...linking.hygiene import canon_map
+    cmap = canon_map()
+    canon = cmap.get(mid, mid)
+    gids = [str(mid)] + ([str(a) for a, c in cmap.items() if c == mid] if canon == mid else [])
     m["combos"] = db.rows(cur, """
         SELECT k.id, k.label, k.molecule_count, k.product_count, k.company_count, k.min_mrp, k.median_mrp, k.max_mrp, k.is_banned, k.banned_skus
         FROM combos k WHERE k.id IN (SELECT DISTINCT p.combo_id FROM product_molecules pm JOIN products p ON p.id = pm.product_id WHERE pm.molecule_id = ?)
@@ -468,44 +479,44 @@ def molecule(mid: int):
     m["share"] = share_table(cur, "molecule", str(mid))
     m["stats"] = db.one(cur, "SELECT * FROM segment_stats WHERE segment_type='molecule' AND segment = ?", [str(mid)])
     m["nppa_ceiling"] = db.rows(cur, "SELECT form_strength, ceiling_price, unit, notification, year, source FROM nppa_ceiling WHERE molecule_id = ? ORDER BY year DESC", [mid])
-    m["jan_aushadhi"] = db.rows(cur, "SELECT drug_code, name, unit_size, mrp, group_name FROM jan_aushadhi WHERE list_contains(string_split(molecule_ids, ','), ?) AND mrp > 0 ORDER BY mrp LIMIT 20", [str(mid)])
+    m["jan_aushadhi"] = db.rows(cur, "SELECT drug_code, name, unit_size, mrp, group_name FROM jan_aushadhi WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) AND mrp > 0 ORDER BY mrp LIMIT 20", [gids])
     m["nsq"] = db.rows(cur, """SELECT alert_month, category, product_text, batch_no, manufacturer, reason, lab, source_url
-                               FROM reg_nsq WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY alert_month DESC NULLS LAST LIMIT 50""", [str(mid)])
+                               FROM reg_nsq WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY alert_month DESC NULLS LAST LIMIT 50""", [gids])
     m["bans"] = db.rows(cur, "SELECT combo_text, notification, notified_on, status FROM reg_banned_fdc WHERE list_contains(string_split(mkey, '|'), ?) ORDER BY notified_on DESC NULLS LAST", [m["mkey"]])
-    m["shortages"] = db.rows(cur, "SELECT region, molecule_text, company, status, reason, updated_on, source FROM shortages WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY updated_on DESC NULLS LAST LIMIT 20", [str(mid)])
-    m["news"] = db.rows(cur, "SELECT id, published_at, source, title, url, topic FROM news WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY published_at DESC LIMIT 15", [str(mid)])
+    m["shortages"] = db.rows(cur, "SELECT region, molecule_text, company, status, reason, updated_on, source FROM shortages WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY updated_on DESC NULLS LAST LIMIT 20", [gids])
+    m["news"] = db.rows(cur, "SELECT id, published_at, source, title, url, topic FROM news WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY published_at DESC LIMIT 15", [gids])
     m["nlem"] = db.rows(cur, "SELECT section, level, dosage FROM nlem WHERE molecule_id = ?", [mid])
     m["approvals"] = db.rows(cur, """SELECT drug_text, indication, approved_on, source_url FROM reg_approvals
-                                     WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY approved_on DESC NULLS LAST LIMIT 20""", [str(mid)])
+                                     WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY approved_on DESC NULLS LAST LIMIT 20""", [gids])
     m["sec"] = db.rows(cur, """SELECT meeting_date, committee, division, drug_text, firm, outcome, source_url FROM sec_items
-                               WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY meeting_date DESC LIMIT 40""", [str(mid)])
+                               WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY meeting_date DESC LIMIT 40""", [gids])
     m["trials"] = db.rows(cur, """SELECT nct_id, ctri_id, title, sponsor, phase, status, india_sites, last_update FROM trials
-                                  WHERE list_contains(string_split(molecule_ids, ','), ?) ORDER BY last_update DESC LIMIT 30""", [str(mid)])
+                                  WHERE list_has_any(string_split(molecule_ids, ','), ?::VARCHAR[]) ORDER BY last_update DESC LIMIT 30""", [gids])
     m["forms"] = db.rows(cur, """SELECT p.dosage_form, count(*) n, median(p.mrp) median_mrp FROM products p
                                  JOIN product_molecules pm ON pm.product_id = p.id WHERE pm.molecule_id = ? AND p.dosage_form IS NOT NULL
                                  GROUP BY 1 ORDER BY 2 DESC LIMIT 12""", [mid])
     k = str(mid)
     m["pharmacology"] = enrichment(cur, mid)
     m["pvpi"] = maybe(cur, f"""SELECT issue_month, drug_text, reaction, indication, source_url FROM pvpi_alerts
-                               WHERE {has_mol()} ORDER BY issue_month DESC""", [k])
+                               WHERE {has_any()} ORDER BY issue_month DESC""", [gids])
     m["ceiling_history"] = maybe(cur, """SELECT year, form_strength, ceiling_price, unit, notification FROM nppa_ceiling_history
                                          WHERE molecule_id = ? ORDER BY lower(form_strength), year""", [mid])
     m["debarments"] = maybe(cur, f"""SELECT state, firm, drug_text, reason, ordered_on, years, document_url FROM firm_debarments
-                                     WHERE {has_mol()} ORDER BY ordered_on DESC NULLS LAST LIMIT 30""", [k])
-    m["procurement"] = procurement(cur, has_mol(), [k])
+                                     WHERE {has_any()} ORDER BY ordered_on DESC NULLS LAST LIMIT 30""", [gids])
+    m["procurement"] = procurement(cur, has_any(), [gids])
     m["global"] = {
         "us_applications": maybe(cur, f"""SELECT a.application_number, a.sponsor, a.app_type, a.brands, a.dosage_forms, a.marketing_status,
                                                  a.first_approval, a.last_action, pa.name AS parent, pa.slug AS parent_slug
                                           FROM us_applications a LEFT JOIN parents pa ON pa.id = a.parent_id
-                                          WHERE {has_mol('a.molecule_ids')} ORDER BY (a.parent_id IS NOT NULL) DESC, a.last_action DESC NULLS LAST LIMIT 60""", [k]),
+                                          WHERE {has_any('a.molecule_ids')} ORDER BY (a.parent_id IS NOT NULL) DESC, a.last_action DESC NULLS LAST LIMIT 60""", [gids]),
         "us_patents": maybe(cur, f"""SELECT application_number, kind, code, use_code, expires_on, ingredients FROM us_patents
-                                     WHERE {has_mol()} AND (expires_on IS NULL OR expires_on >= current_date) ORDER BY expires_on LIMIT 40""", [k]),
+                                     WHERE {has_any()} AND (expires_on IS NULL OR expires_on >= current_date) ORDER BY expires_on LIMIT 40""", [gids]),
         "us_ndc": (maybe(cur, f"""SELECT count(*) n, count(DISTINCT labeler) labelers, count(*) FILTER (WHERE parent_id IS NOT NULL) indian_group_ndcs,
                                          list(DISTINCT pa.name) FILTER (WHERE pa.name IS NOT NULL) indian_groups
-                                  FROM us_ndc u LEFT JOIN parents pa ON pa.id = u.parent_id WHERE {has_mol('u.molecule_ids')}""", [k]) or [None])[0],
+                                  FROM us_ndc u LEFT JOIN parents pa ON pa.id = u.parent_id WHERE {has_any('u.molecule_ids')}""", [gids]) or [None])[0],
         "who_pq": maybe(cur, f"""SELECT ref, inn, applicant, dosage_form, therapeutic_area, basis, prequalified_on FROM who_pq
-                                 WHERE {has_mol()} ORDER BY prequalified_on DESC NULLS LAST LIMIT 30""", [k]),
-        "ema": maybe(cur, f"SELECT * FROM ema_medicines WHERE {has_mol()} LIMIT 20", [k]),
+                                 WHERE {has_any()} ORDER BY prequalified_on DESC NULLS LAST LIMIT 30""", [gids]),
+        "ema": maybe(cur, f"SELECT * FROM ema_medicines WHERE {has_any()} LIMIT 20", [gids]),
     }
     m["cdci"] = maybe(cur, """SELECT identifier, substance_name, cas_number, unii, molecular_formula, molecular_weight, iupac_name,
                                      substance_description, toxicity FROM cdci_substance WHERE molecule_id = ? LIMIT 3""", [mid])
@@ -515,13 +526,15 @@ def molecule(mid: int):
     m["brand_registry_count"] = (maybe(cur, "SELECT count(*) n, count(DISTINCT firm_name) firms FROM brand_registry WHERE generic_name ILIKE ?",
                                        [f"%{m['name']}%"]) or [None])[0]
     from ...linking.read import for_molecule
-    m["links"] = for_molecule(mid)      # derived links (Phase 1): each row has method, confidence and `inferred`
+    m["links"] = for_molecule(canon)      # derived links (Phase 1): each row has method, confidence and `inferred`
     from ...linking.read import us_eu_status
-    m["us_eu"] = us_eu_status(str(mid))  # single-ingredient US / EU records (combinations are on product pages)
+    m["us_eu"] = us_eu_status(str(canon))  # single-ingredient US / EU records (combinations are on product pages)
     from ...linking.read import timeline
-    m["timeline"] = timeline([("molecule", mid)])
+    m["timeline"] = timeline([("molecule", canon)] + ([("molecule", mid)] if canon != mid else []))
     from ...linking.read import launches
-    m["launches"] = launches(molecule=mid)
+    m["launches"] = launches(molecule=canon)
+    from ...linking.read import aliases_of
+    m["hygiene"] = aliases_of(mid, canon)
     return cleanrows([m])[0]
 
 

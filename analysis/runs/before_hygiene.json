@@ -1,0 +1,305 @@
+{
+ "db": "D:/pharmacopy/tmp/pre_hyg.duckdb",
+ "at": "2026-11-03T00:28:07",
+ "coverage": {
+  "brand_registry -> molecule": {
+   "n": 90464,
+   "linked": 81541,
+   "pct": 90.1
+  },
+  "brand_first_seen -> molecule": {
+   "n": 183483,
+   "linked": 174019,
+   "pct": 94.8
+  },
+  "usfda recall -> molecule": {
+   "n": 160,
+   "linked": 151,
+   "pct": 94.4
+  },
+  "trial -> molecule": {
+   "n": 2012,
+   "linked": 803,
+   "pct": 39.9
+  },
+  "news -> molecule": {
+   "n": 60240,
+   "linked": 6040,
+   "pct": 10.0
+  },
+  "tender -> molecule": {
+   "n": 7453,
+   "linked": 5211,
+   "pct": 69.9
+  },
+  "product -> US Orange Book (same ingredient set)": {
+   "n": 535507,
+   "linked": 211799,
+   "pct": 39.6
+  },
+  "product -> live US patent/exclusivity (same set)": {
+   "n": 535507,
+   "linked": 106865,
+   "pct": 20.0
+  },
+  "product -> EMA (same set)": {
+   "n": 535507,
+   "linked": 58737,
+   "pct": 11.0
+  },
+  "molecule -> US Orange Book (single-ingredient set)": {
+   "n": 5006,
+   "linked": 981,
+   "pct": 19.6
+  },
+  "event -> any entity": {
+   "n": 2435,
+   "linked": 1622,
+   "pct": 66.6
+  },
+  "event -> 2+ entities": {
+   "n": 2435,
+   "linked": 609,
+   "pct": 25.0
+  },
+  "event -> molecule": {
+   "n": 2435,
+   "linked": 796,
+   "pct": 32.7
+  },
+  "event -> ingredient_set": {
+   "n": 2435,
+   "linked": 260,
+   "pct": 10.7
+  },
+  "event -> company": {
+   "n": 2435,
+   "linked": 272,
+   "pct": 11.2
+  },
+  "event -> parent": {
+   "n": 2435,
+   "linked": 1211,
+   "pct": 49.7
+  },
+  "price history: products with 2+ points, raw jump >= 1.8x": {
+   "n": 251420,
+   "linked": 20108,
+   "pct": 8.0
+  },
+  "price history: products with a comparable per-unit series (2+ points)": {
+   "n": 251420,
+   "linked": 151370,
+   "pct": 60.2
+  },
+  "price history: comparable series still jumping >= 1.8x": {
+   "n": 151370,
+   "linked": 724,
+   "pct": 0.5
+  },
+  "banned FDC -> combo": {
+   "n": 690,
+   "linked": 219,
+   "pct": 31.7
+  },
+  "brand_first_seen -> company": {
+   "n": 183483,
+   "linked": 155732,
+   "pct": 84.9
+  },
+  "brand_first_seen (post-baseline) -> company": {
+   "n": 39,
+   "linked": 37,
+   "pct": 94.9
+  },
+  "molecule -> dated India launch signal (high)": {
+   "n": 5006,
+   "linked": 457,
+   "pct": 9.1
+  },
+  "molecule -> any dated launch signal (incl. inferred)": {
+   "n": 5006,
+   "linked": 844,
+   "pct": 16.9
+  },
+  "molecule hygiene: molecule nodes folded into a canonical molecule": {
+   "n": 5006,
+   "linked": 0,
+   "pct": 0.0
+  },
+  "molecule hygiene: distinct molecules after folding": {
+   "n": 5006,
+   "linked": 5006,
+   "pct": 100.0
+  },
+  "product -> molecule with ATC code (via canonical)": {
+   "n": 535507,
+   "linked": 478210,
+   "pct": 89.3
+  },
+  "company -> group (curated)": {
+   "n": 15680,
+   "linked": 158,
+   "pct": 1.0
+  },
+  "company -> group (curated or auto)": {
+   "n": 15680,
+   "linked": 15680,
+   "pct": 100.0
+  },
+  "company -> multi-company auto-group (name variants)": {
+   "n": 15680,
+   "linked": 1285,
+   "pct": 8.2
+  },
+  "active product -> group (curated)": {
+   "n": 535507,
+   "linked": 77352,
+   "pct": 14.4
+  },
+  "active product -> group (curated or auto)": {
+   "n": 535507,
+   "linked": 439758,
+   "pct": 82.1
+  },
+  "approval -> company": {
+   "n": 3710,
+   "linked": 2674,
+   "pct": 72.1
+  },
+  "tender -> company": {
+   "n": 7453,
+   "linked": 3171,
+   "pct": 42.5
+  }
+ },
+ "inferred": {
+  "brand_registry -> molecule (inferred only)": 4629,
+  "brand_first_seen -> molecule (inferred only)": 6542,
+  "usfda -> molecule (inferred only)": 17,
+  "trials -> molecule (inferred only)": 97,
+  "news -> molecule (inferred only)": 3988,
+  "tenders -> molecule (inferred only)": 552,
+  "banned FDC -> combo (inferred only)": 49,
+  "molecule hygiene: alias candidates awaiting review": 0
+ },
+ "paths": {
+  "P1 NSQ": {
+   "start": 4770,
+   "product (resolvable)": 657,
+   "molecule": 4218,
+   "maker": 2425,
+   "group": 220,
+   "group (incl. auto)": 2425,
+   "ticker": 90,
+   "price window": 90,
+   "news": 89,
+   "all hops": 46,
+   "end_to_end_pct": 1.0
+  },
+  "P2 SEC": {
+   "start": 4531,
+   "molecule": 2926,
+   "later approval (same set)": 1450,
+   "brand registration (same set)": 892,
+   "NPPA retail price (same set)": 550,
+   "dated first listing (same set)": 462,
+   "all hops": 112,
+   "end_to_end_pct": 2.5
+  },
+  "P3 US FDA": {
+   "start (India)": 272,
+   "plant": 0,
+   "group": 49,
+   "ticker": 38,
+   "US applications": 45,
+   "molecule (recalls)": 151,
+   "all hops (needs plant)": 0,
+   "end_to_end_pct": 0.0
+  },
+  "P4 Tender": {
+   "start": 7453,
+   "molecule": 5211,
+   "supplier company": 3171,
+   "supplier's product": 1066,
+   "supplier quality record": 2581,
+   "all hops": 909,
+   "end_to_end_pct": 12.2
+  },
+  "P5 Patent": {
+   "start (molecules with live US patents)": 518,
+   "US ANDA generics": 417,
+   "India products": 518,
+   "dated India launch": 174,
+   "all hops": 159,
+   "end_to_end_pct": 30.7
+  }
+ },
+ "link_totals": [
+  {
+   "linker": "bans:combo",
+   "links": 2742,
+   "high": 2013
+  },
+  {
+   "linker": "company:approvals",
+   "links": 2674,
+   "high": 2674
+  },
+  {
+   "linker": "company:auto_groups",
+   "links": 15836,
+   "high": 15522
+  },
+  {
+   "linker": "global:combo_sets",
+   "links": 40185,
+   "high": 40185
+  },
+  {
+   "linker": "global:ema",
+   "links": 1363,
+   "high": 1363
+  },
+  {
+   "linker": "global:orange_book",
+   "links": 40632,
+   "high": 40632
+  },
+  {
+   "linker": "launch:brand_company",
+   "links": 155732,
+   "high": 155732
+  },
+  {
+   "linker": "mol:brand_first_seen",
+   "links": 252937,
+   "high": 245821
+  },
+  {
+   "linker": "mol:brand_registry",
+   "links": 124440,
+   "high": 119243
+  },
+  {
+   "linker": "mol:news",
+   "links": 5887,
+   "high": 1865
+  },
+  {
+   "linker": "mol:procurement_rates",
+   "links": 6257,
+   "high": 5677
+  },
+  {
+   "linker": "mol:trials",
+   "links": 1540,
+   "high": 1438
+  },
+  {
+   "linker": "mol:usfda_actions",
+   "links": 200,
+   "high": 183
+  }
+ ]
+}

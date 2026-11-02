@@ -158,3 +158,20 @@ def approvals_for_company(company_id: int) -> list[dict]:
     return _q("""SELECT a.approved_on, a.drug_text, a.approval_type, a.dosage_form, a.applicant, a.source_url, l.method, l.confidence, l.evidence
                  FROM entity_links l JOIN reg_approvals a ON CAST(a.id AS VARCHAR) = l.src_key
                  WHERE l.linker = 'company:approvals' AND l.dst_id = ? ORDER BY a.approved_on DESC NULLS LAST LIMIT 60""", [str(company_id)])
+
+
+def aliases_of(mid: int, canon: int) -> dict:
+    """Molecule hygiene for a molecule page: what it is the same as, what was folded into it, what awaits review."""
+    out = {"canonical": None, "aliases": [], "pending": []}
+    if canon != mid:
+        out["canonical"] = (_q("""SELECT m.id, m.name, x.method, x.confidence, x.evidence FROM molecule_aliases x JOIN molecules m ON m.id = x.canonical_id
+                                  WHERE x.alias_id = ? AND x.applied ORDER BY x.confidence DESC LIMIT 1""", [mid]) or [None])[0]
+        return out
+    out["aliases"] = _q("""SELECT m.id, m.name, m.product_count, arg_max(x.method, x.confidence) AS method, max(x.confidence) AS confidence,
+                                  arg_max(x.evidence, x.confidence) AS evidence
+                           FROM molecule_aliases x JOIN molecules m ON m.id = x.alias_id
+                           WHERE x.canonical_id = ? AND x.applied GROUP BY ALL ORDER BY m.product_count DESC""", [mid])
+    out["pending"] = _q("""SELECT m.id, m.name, m.product_count, x.method, x.confidence, x.evidence FROM molecule_aliases x
+                           JOIN molecules m ON m.id = x.alias_id
+                           WHERE x.canonical_id = ? AND NOT x.applied ORDER BY m.product_count DESC LIMIT 30""", [mid])
+    return out

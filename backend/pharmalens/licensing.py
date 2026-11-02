@@ -120,6 +120,7 @@ TABLES = {
     "linker_runs":          (["drugden"], "run log"),
     "launch_signals":       (["cdsco_web", "cdci", "gazette", "drugden"], "per-row licence column"),
     "auto_groups":          (["kaggle_nc", "drugden"], "company names come from the catalog"),
+    "molecule_aliases":     (["kaggle_nc", "chembl", "drugden"], "molecule names from the catalog; ChEMBL ids share-alike"),
 }
 
 
