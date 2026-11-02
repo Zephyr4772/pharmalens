@@ -497,6 +497,8 @@ def molecule(mid: int):
                                        ORDER BY (indication IS NULL), length(generic_name) LIMIT 25""", [m["cdci"][0]["identifier"]]) if m["cdci"] else []
     m["brand_registry_count"] = (maybe(cur, "SELECT count(*) n, count(DISTINCT firm_name) firms FROM brand_registry WHERE generic_name ILIKE ?",
                                        [f"%{m['name']}%"]) or [None])[0]
+    from ...linking.read import for_molecule
+    m["links"] = for_molecule(mid)      # derived links (Phase 1): each row has method, confidence and `inferred`
     return cleanrows([m])[0]
 
 

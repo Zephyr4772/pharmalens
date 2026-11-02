@@ -7,6 +7,7 @@ import { ErrorBox, Kpi, Loading, Pager, Panel, Star } from "../components/ui";
 import { ProductTable } from "./Screener";
 import { Outcome } from "./Pipeline";
 import { CeilingHistory, Debarments, GlobalRegs, Pharmacology, Procurement, PvpiAlerts } from "../components/Depth";
+import { MoleculeLinks } from "../components/Linked";
 
 export default function MoleculeDetail() {
   const { id } = useParams();
@@ -121,6 +122,7 @@ export default function MoleculeDetail() {
           </Panel>
         </div>
       )}
+      <MoleculeLinks links={d.links} />
       <CeilingHistory rows={d.ceiling_history} />
       <Debarments rows={d.debarments} showFirm />
       <Panel title={`Single-molecule brands — cheapest per unit first`} sub={prods.data ? `${num(prods.data.meta.total)} active SKUs` : ""}

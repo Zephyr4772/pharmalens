@@ -111,6 +111,13 @@ TABLES = {
     "segment_share":        (["drugden", "kaggle_nc"], "estimates computed from the catalog: aggregates only"),
     "segment_stats":        (["drugden", "kaggle_nc"], "aggregates only"),
     "events":               (["drugden", "news", "nse", "cdsco_web"], "mixes every feed: internal unless filtered by source"),
+    # derived links (Phase 1). Each row also carries its own `licence` (strictest of its inputs), so links built only
+    # from open inputs can be released even though the table as a whole mixes classes.
+    "entity_links":         (["drugden", "kaggle_nc", "cdsco_web", "openfda", "ctgov", "news", "state_gov", "gazette"],
+                             "per-row licence column"),
+    "event_entities":       (["drugden", "news", "nse", "cdsco_web"], "per-row licence column"),
+    "price_unit_obs":       (["kaggle_nc", "mfr_lists", "drugsetu"], "per-row licence column; mfr rows are sellable"),
+    "linker_runs":          (["drugden"], "run log"),
 }
 
 
