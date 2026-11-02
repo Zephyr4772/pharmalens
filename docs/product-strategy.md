@@ -326,3 +326,44 @@ Impact / Effort: H / M / L. **QW** = quick win.
    journalists, researchers), or go straight to paid access for firms, with free use limited to samples?
 3. **Are you ready to formalise**: register DrugDen as an entity, send the CDSCO/NPPA permission letters, and budget
    for a legal review (and later, licensed sales or NSE data)? Several "Now" items depend on this.
+
+---
+
+## Decision (2026-11-02): investors and equity analysts first
+
+The owner chose persona P1 (investors / pharma equity analysts) as the first paying customer. Everything below is
+designed for Priya's day; other personas keep their tools as secondary modules.
+
+### Terminal: from 13 screens to 5 jobs
+| New screen | Answers | Built from (exists today) |
+|---|---|---|
+| **Today** (home) | "What changed for the companies I follow, and what's coming?" Watchlist rows (price, change, latest signal badges, next results date), a ranked signal feed (results, US FDA, regulatory orders, quality failures, approvals/SEC, price notices) for listed groups, this week's results calendar, NIFTY Pharma and movers | MKT, EQ, events, `results_calendar`, quotes |
+| **Companies** | "Which names deserve attention?" One screener of listed groups: price, 1y change, m-cap, P/E, revenue and profit YoY, margin, quality trend, US FDA actions, governance flags, DPCO exposure; sort, filter, star, export | CO, EQ, `fin_results`, `/sanity` logic |
+| **Company dossier** | "Everything about X, in one place" Tabs: Overview (price chart with events overlaid), Financials (quarters, margins), Risk (sanity scorecard with sources), Pipeline (SEC, approvals, trials, NPPA launch prices, new brands), Quality (NSQ, FDA), Filings, News, Portfolio (therapy mix, price-control exposure) | group profile, `/fin`, `/sanity`, PIPE |
+| **Signals** | "Show me every event of type T for companies C since D" Filterable tape with sources and CSV | REG, NEWS, events |
+| **Calendar** | "What's scheduled?" Results dates, SEC meetings, NPPA notifications | `results_calendar`, `sec_items` |
+
+Moved one click away under **Research**: product screener, molecules, combinations and price spreads, SHELF, alerts
+setup, feeds (owner only). Global **Ctrl+K search uses the name index**, so "drl" or "glenmrk" works in the terminal too.
+
+### Specs: an analyst in your pocket
+- **/watch** companies (and molecules): real-time alerts only for the watchlist, each with context: "Alkem: 4th NSQ
+  listing this quarter (molecules X, Y); stock −1.2% today; last results profit +12% YoY".
+- **Results day**: a preview the morning a watched company reports (last 4 quarters, consensus-free trend), then a
+  summary minutes after filing (YoY, margin change, anything unusual).
+- **Weekly portfolio digest** (Sunday evening): for the watchlist, what changed in quality, regulatory, filings,
+  financials and price.
+- Briefings default to the watchlist first, the market second.
+
+### Data priorities this implies
+1. Group mapping for every listed pharma company and its subsidiaries (top of the list: correct attribution).
+2. Results depth: balance sheet, cash flow, segment revenue (US vs India), shareholding and promoter pledges.
+3. Event history usable for event studies (FDA action or NSQ spike vs. stock reaction).
+4. Clear wording and source links on every flag ("disclosed", "listed as"), never verdicts.
+
+### Build order
+1. **Watchlist backbone**: one watchlist shared by terminal and Specs; `/watch`, `/unwatch`, `/watchlist`.
+2. **Today** home and the **Companies** screener.
+3. **Company dossier** tabs (reuse the existing group page; add Financials and Risk).
+4. Specs results-day and weekly digests.
+5. Signals and Calendar screens; move the rest under Research.
