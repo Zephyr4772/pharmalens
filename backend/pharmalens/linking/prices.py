@@ -10,84 +10,64 @@ A point is `comparable` (safe on a per-unit trend line) when its pack is known f
 (tablet, ml, g...) matches the product's other comparable points, and its unit price is within 2.5x of their
 median; anything else keeps its row with the reason in `note`.
 """
-import statistics
-
-import pandas as pd
-
 from .. import db
 from ..config import DATA_DIR
-from ..normalize import pack_quantity
 from .store import HIGH, ensure, licence_of
 
 PACKS = DATA_DIR / "derived" / "price_packs.parquet"
 MAX_RATIO = 2.5
+UNIT_RX = r"(tablet|capsule|softgel|ml|gm|g|sachet|unit|piece|lozenge|injection|patch|respule|rotacap|suppositor|pessar|strip|vial|ampoule)"
 
 
 def run() -> dict:
+    """All in one DuckDB statement: ~650k observations stay inside the database's memory cap (the server has 2 GB)."""
     ensure()
-    cur = db.cursor()
-    obs = cur.execute("""SELECT o.product_id, o.observed_on, o.source, o.mrp, p.name_norm, p.pack_size, p.pack_qty
-                         FROM price_observations o JOIN products p ON p.id = o.product_id WHERE o.mrp > 0""").fetchall()
-    src_pack: dict[tuple[str, str], tuple] = {}
-    if PACKS.exists():
-        for r in pd.read_parquet(PACKS).itertuples(index=False):
-            unit = r.pack_unit if isinstance(r.pack_unit, str) else None      # parquet gives NaN for a missing unit
-            src_pack[(r.name_norm, r.source)] = (r.pack_text, r.pack_qty if r.pack_qty == r.pack_qty else None, unit,
-                                                 r.mrp if r.mrp == r.mrp else None)
-    mfr = {}
-    for pid, eff, mrp, pack, qty in cur.execute("""SELECT product_id, effective_on, mrp, pack, pack_qty FROM mfr_prices
-                                                   WHERE product_id IS NOT NULL AND mrp > 0""").fetchall():
-        mfr[(pid, eff)] = (mrp, pack, qty)
+    packs = str(PACKS).replace("\\", "/").replace("'", "''")
+    sp = (f"SELECT name_norm, source, pack_text, pack_qty, NULLIF(pack_unit, '') pack_unit, mrp smrp FROM read_parquet('{packs}')"
+          if PACKS.exists() else
+          "SELECT NULL::VARCHAR name_norm, NULL::VARCHAR source, NULL::VARCHAR pack_text, NULL::DOUBLE pack_qty, NULL::VARCHAR pack_unit, NULL::DOUBLE smrp WHERE false")
     lic_cat, lic_mfr = licence_of("price_observations", "products"), licence_of("mfr_prices")
-
-    rows = []
-    for pid, d, src, mrp, nn, cur_pack, cur_qty in obs:
-        rec = {"product_id": pid, "observed_on": d, "source": src, "mrp": mrp, "pack_text": None, "pack_qty": None,
-               "pack_basis": None, "unit_price": None, "comparable": False, "method": None, "confidence": 0.0, "note": "",
-               "licence": lic_cat, "_unit": None}
-        sp = src_pack.get((nn, src))
-        if src.startswith("mfr:") and (pid, d) in mfr:
-            lmrp, lpack, lqty = mfr[(pid, d)]
-            if lqty:
-                rec.update(pack_text=lpack, pack_qty=lqty, pack_basis="mfr_list", unit_price=lmrp / lqty, method="mfr_list_unit",
-                           confidence=0.95, licence=lic_mfr, _unit=pack_quantity(f"pack of {lqty:g} {lpack or ''}")[1])
-        elif sp and sp[1] and sp[3] and abs(sp[3] - mrp) <= max(0.5, 0.01 * mrp):
-            rec.update(pack_text=sp[0], pack_qty=sp[1], pack_basis="source_row", unit_price=mrp / sp[1], method="source_pack",
-                       confidence=0.95, _unit=sp[2])
-        if rec["pack_basis"] is None and cur_qty:
-            rec.update(pack_text=cur_pack, pack_qty=cur_qty, pack_basis="product_pack", unit_price=mrp / cur_qty, method="assumed_current_pack",
-                       confidence=0.6, note="pack not known for this source: the catalog's current pack is assumed")
-            rec["_unit"] = pack_quantity(cur_pack)[1]
-        if rec["pack_basis"] is None:
-            rec.update(method="no_pack", note="no pack known")
-        rows.append(rec)
-
-    # comparability within each product
-    by: dict[int, list[dict]] = {}
-    for r in rows:
-        by.setdefault(r["product_id"], []).append(r)
-    for pts in by.values():
-        known = [r for r in pts if r["confidence"] >= HIGH and r["unit_price"]]
-        if not known:
-            continue
-        units = {r["_unit"] for r in known if r["_unit"]}
-        main_unit = max(units, key=lambda u: sum(1 for r in known if r["_unit"] == u)) if units else None
-        med = statistics.median(r["unit_price"] for r in known)
-        for r in known:
-            if main_unit and r["_unit"] and r["_unit"] != main_unit:
-                r["note"] = f"pack counted in {r['_unit']}, other points in {main_unit}"
-            elif max(r["unit_price"], med) / min(r["unit_price"], med) > MAX_RATIO:
-                r["note"] = f"unit price {r['unit_price'] / med:.1f}x the product's median: pack or unit mismatch likely"
-            else:
-                r["comparable"] = True
-    df = pd.DataFrame(rows).drop(columns=["_unit"])
     with db.writer() as w:
         w.execute("DELETE FROM price_unit_obs")
-        w.register("_p", df)
-        w.execute("""INSERT INTO price_unit_obs SELECT product_id::INTEGER, observed_on::DATE, source, mrp, pack_text, pack_qty::DOUBLE, pack_basis,
-                     unit_price::DOUBLE, comparable, method, confidence, note, licence FROM _p""")
-        w.unregister("_p")
-        high = int((df.confidence >= HIGH).sum())
+        w.execute(f"""
+        INSERT INTO price_unit_obs
+        WITH sp AS ({sp}),
+        mf AS (SELECT product_id, effective_on, any_value(mrp) lmrp, any_value(pack) lpack, any_value(pack_qty) lqty
+               FROM mfr_prices WHERE product_id IS NOT NULL AND mrp > 0 GROUP BY 1, 2),
+        o AS (SELECT o.product_id, o.observed_on, o.source, o.mrp, p.name_norm, p.pack_size, p.pack_qty cur_qty
+              FROM price_observations o JOIN products p ON p.id = o.product_id WHERE o.mrp > 0),
+        j AS (SELECT o.*, sp.pack_text sp_text, sp.pack_qty sp_qty, sp.pack_unit sp_unit, sp.smrp, mf.lmrp, mf.lpack, mf.lqty
+              FROM o LEFT JOIN sp ON sp.name_norm = o.name_norm AND sp.source = o.source
+              LEFT JOIN mf ON o.source LIKE 'mfr:%' AND mf.product_id = o.product_id AND mf.effective_on = o.observed_on),
+        b AS (SELECT *, CASE WHEN lqty > 0 THEN 'mfr_list'
+                             WHEN sp_qty > 0 AND smrp IS NOT NULL AND abs(smrp - mrp) <= greatest(0.5, 0.01 * mrp) THEN 'source_row'
+                             WHEN cur_qty > 0 THEN 'product_pack' END AS basis FROM j),
+        u AS (SELECT product_id, observed_on, source, mrp, basis,
+                     CASE basis WHEN 'mfr_list' THEN lpack WHEN 'source_row' THEN sp_text WHEN 'product_pack' THEN pack_size END AS pack_text,
+                     CASE basis WHEN 'mfr_list' THEN lqty WHEN 'source_row' THEN sp_qty WHEN 'product_pack' THEN cur_qty END AS pack_qty,
+                     CASE basis WHEN 'mfr_list' THEN lmrp / lqty WHEN 'source_row' THEN mrp / sp_qty WHEN 'product_pack' THEN mrp / cur_qty END AS unit_price,
+                     CASE basis WHEN 'mfr_list' THEN NULLIF(regexp_extract(lower(coalesce(lpack, '')), '{UNIT_RX}', 1), '')
+                                WHEN 'source_row' THEN sp_unit END AS unit,
+                     CASE basis WHEN 'mfr_list' THEN 'mfr_list_unit' WHEN 'source_row' THEN 'source_pack'
+                                WHEN 'product_pack' THEN 'assumed_current_pack' ELSE 'no_pack' END AS meth,
+                     CASE basis WHEN 'mfr_list' THEN 0.95 WHEN 'source_row' THEN 0.95 WHEN 'product_pack' THEN 0.6 ELSE 0.0 END AS confidence,
+                     CASE WHEN basis = 'mfr_list' THEN '{lic_mfr}' ELSE '{lic_cat}' END AS licence
+              FROM b),
+        st AS (SELECT product_id, median(unit_price) med, mode(unit) main_unit FROM u WHERE confidence >= {HIGH} AND unit_price > 0 GROUP BY 1)
+        SELECT u.product_id, u.observed_on, u.source, u.mrp, u.pack_text, u.pack_qty, u.basis, u.unit_price,
+               u.confidence >= {HIGH} AND u.unit_price > 0 AND NOT (u.unit IS NOT NULL AND st.main_unit IS NOT NULL AND u.unit <> st.main_unit)
+                 AND greatest(u.unit_price, st.med) / least(u.unit_price, st.med) <= {MAX_RATIO} AS comparable,
+               u.meth, u.confidence,
+               CASE WHEN u.basis IS NULL THEN 'no pack known'
+                    WHEN u.basis = 'product_pack' THEN 'pack not known for this source: the catalog''s current pack is assumed'
+                    WHEN u.unit IS NOT NULL AND st.main_unit IS NOT NULL AND u.unit <> st.main_unit
+                      THEN 'pack counted in ' || u.unit || ', other points in ' || st.main_unit
+                    WHEN greatest(u.unit_price, st.med) / least(u.unit_price, st.med) > {MAX_RATIO}
+                      THEN 'unit price ' || round(u.unit_price / st.med, 1) || 'x the product''s median: pack or unit mismatch likely'
+                    ELSE '' END AS note,
+               u.licence
+        FROM u LEFT JOIN st USING (product_id)""")
+        n, high, comp = w.execute(f"SELECT count(*), count(*) FILTER (WHERE confidence >= {HIGH}), count(*) FILTER (WHERE comparable) FROM price_unit_obs").fetchone()
         w.execute("INSERT INTO linker_runs VALUES ('prices', now(), now(), ?, ?, ?)",
-                  [len(df), high, f"{int(df.comparable.sum()):,} comparable; packs file {'found' if PACKS.exists() else 'missing'}"])
-    return {"linker": "prices", "links": len(df), "high": high, "comparable": int(df.comparable.sum())}
+                  [n, high, f"{comp:,} comparable; packs file {'found' if PACKS.exists() else 'missing'}"])
+    return {"linker": "prices", "links": n, "high": high, "comparable": comp}

@@ -9,6 +9,7 @@ empty), so the same script gives the "before" and "after" numbers.
 links (below 0.85) are reported separately and never counted as coverage.
 """
 import json
+import os
 import sys
 from datetime import datetime
 
@@ -19,7 +20,7 @@ HIGH = 0.85
 
 def main(path: str, out: str | None = None) -> dict:
     c = duckdb.connect(path, read_only=True)
-    c.execute("SET memory_limit='1500MB'")
+    c.execute(f"SET memory_limit='{os.getenv('AUDIT_MEMORY', '1500MB')}'")   # the server has 2 GB: AUDIT_MEMORY=400MB there
     tables = {r[0] for r in c.execute("SELECT table_name FROM information_schema.tables WHERE table_schema = 'main'").fetchall()}
     for t, ddl in [("entity_links", "linker VARCHAR, src_table VARCHAR, src_key VARCHAR, dst_type VARCHAR, dst_id VARCHAR, method VARCHAR, confidence DOUBLE"),
                    ("event_entities", "event_id BIGINT, entity_type VARCHAR, entity_id VARCHAR, method VARCHAR, confidence DOUBLE"),
