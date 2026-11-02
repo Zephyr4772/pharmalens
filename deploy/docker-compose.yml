@@ -21,6 +21,11 @@ services:
     ports:
       - "127.0.0.1:8010:8010"
     mem_limit: 1400m
+    # public resolvers: the host's resolver (Azure DNS + Tailscale MagicDNS via systemd-resolved) intermittently times
+    # out or answers empty for gov.in hosts (cdscoonline.gov.in), failing the CDSCO feeds; the app needs no tailnet names
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/v1/healthz', timeout=10)"]
       interval: 60s
