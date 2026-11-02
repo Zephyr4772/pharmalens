@@ -108,3 +108,19 @@ export function Timeline({ rows, sub }: { rows: Row[] | undefined; sub?: string 
     </Panel>
   );
 }
+
+// Prohibited-FDC notifications whose ingredient set matches this combination (Phase 1 #12).
+export function BanLinks({ rows }: { rows: Row[] | undefined }) {
+  const { toggle, keep } = useShowInferred();
+  const shown = keep(rows);
+  if (!rows?.length) return null;
+  return (
+    <Panel title="Prohibited FDC notifications" sub="Gazette bans whose ingredients match this combination exactly (salt forms folded); check strengths in the notification" right={toggle}>
+      {shown.length ? <table className="tt"><tbody>{shown.map((b) => <tr key={b.id}>
+        <td><span className={`badge ${b.status === "banned" ? "b-down" : "b-warn"}`}>{String(b.status).toUpperCase()}</span></td>
+        <td title={b.combo_text}>{b.combo_text}</td><td className="mut">{b.notification}</td><td>{day(b.notified_on)}</td>
+        <td>{b.source_url && <a href={b.source_url} target="_blank" rel="noreferrer">pdf</a>}</td><td><Inferred r={b} /></td></tr>)}</tbody></table>
+        : <div className="empty">only inferred matches: tick “show inferred”</div>}
+    </Panel>
+  );
+}

@@ -107,3 +107,10 @@ def timeline(pairs: list[tuple[str, str]], limit: int = 60, require_all: bool = 
                   FROM event_entities x JOIN events e ON e.id = x.event_id
                   WHERE ({cond}) GROUP BY ALL {having}
                   ORDER BY e.ts DESC LIMIT {int(limit)}""", args)
+
+
+def bans_for_combo(combo_id: int) -> list[dict]:
+    return _q("""SELECT b.id, b.combo_text, b.notification, b.notified_on, b.status, b.source_url, l.method, l.confidence, l.evidence
+                 FROM entity_links l JOIN reg_banned_fdc b ON CAST(b.id AS VARCHAR) = l.src_key
+                 WHERE l.linker = 'bans:combo' AND l.dst_type = 'combo' AND l.dst_id = ? ORDER BY l.confidence DESC, b.notified_on DESC""",
+              [str(combo_id)])

@@ -40,7 +40,7 @@ quinoline tartrazine caramel erythrosine brilliant blue paraben parabens flavour
 export rx count bottles container net wt oz fl gram grams gastro resistant cutaneous conventional orodispersible
 liquids creams gels pellets oily diluted inhalation form forms undefined containing contain contains details
 compound powdered uncoated soft amp pfs sterilised sterilized disposable size i ii iii iv p s b q d m o t h sp cv am
-ls tz nrd x cm inches mm vet bolus
+ls tz nrd x cm inches mm vet bolus dried extract extracts
 """.split())
 
 # prose names that are drugs but also everyday words in news (batteries, beverages, chemicals, nutrition)

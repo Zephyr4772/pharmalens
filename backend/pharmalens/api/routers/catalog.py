@@ -409,6 +409,8 @@ def combo(cid: int):
     iset = set_of_combo(cid)
     c["timeline"] = timeline([("ingredient_set", iset)]) if iset else []
     c["us_eu"] = us_eu_status(iset)
+    from ...linking.read import bans_for_combo
+    c["ban_links"] = bans_for_combo(cid)    # Phase 1 #12: notifications whose resolved ingredient set equals this one
     return cleanrows([c])[0]
 
 
