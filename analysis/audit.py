@@ -151,6 +151,14 @@ def main(path: str, out: str | None = None) -> dict:
     C["maker -> marketer pairs (contract / same group / own)"] = {
         "n": one("SELECT count(*) FROM maker_makes_for")[0], "linked": one("SELECT count(*) FROM maker_makes_for WHERE relation = 'contract'")[0],
         "pct": pct(one("SELECT count(*) FROM maker_makes_for WHERE relation = 'contract'")[0], one("SELECT count(*) FROM maker_makes_for")[0])}
+    # ---- plant sites (stage 2)
+    cov("NSQ batch -> site", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "site"))
+    cov("US FDA action (India) -> site", "usfda_actions a", linkcond("usfda_actions", "CAST(a.id AS VARCHAR)", "site"), "country ILIKE '%india%'")
+    cov("approval -> site", "reg_approvals a", linkcond("reg_approvals", "CAST(a.id AS VARCHAR)", "site"), "sites IS NOT NULL")
+    if "sites" in tables:
+        n_s, n_pin, n_grp = one("SELECT count(*), count(*) FILTER (WHERE kind = 'pin'), count(*) FILTER (WHERE parent_id IS NOT NULL) FROM sites")
+        C["sites (PIN-keyed / in a curated group)"] = {"n": n_s, "linked": n_pin, "pct": pct(n_pin, n_s)}
+        C["sites in a curated group"] = {"n": n_s, "linked": n_grp, "pct": pct(n_grp, n_s)}
     # ---- NSQ batch -> SKU (#7)
     cov("NSQ batch -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"))
     cov("NSQ batch since 2025 -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"), "alert_month >= '2025-01'")
@@ -240,17 +248,26 @@ def main(path: str, out: str | None = None) -> dict:
     # P3 US FDA action -> plant -> company -> group -> ticker -> US applications (Indian actions)
     mk_join = ("EXISTS (SELECT 1 FROM hl JOIN makers mk ON mk.maker_key = hl.dst_id WHERE hl.src_table = 'usfda_actions' "
                "AND hl.src_key = CAST(a.id AS VARCHAR) AND hl.dst_type = 'maker' {})")
-    r = one(f"""SELECT count(*), 0,
-        count(*) FILTER (WHERE {mk_join.format('')}),
-        count(*) FILTER (WHERE {mk_join.format("AND (mk.parent_id IS NOT NULL OR mk.auto_group IS NOT NULL)")}),
-        count(*) FILTER (WHERE a.parent_id IS NOT NULL OR {mk_join.format("AND mk.parent_id IS NOT NULL")}),
-        count(*) FILTER (WHERE a.parent_id IS NOT NULL OR {linkcond('usfda_actions', 'CAST(a.id AS VARCHAR)', 'parent')}),
-        count(*) FILTER (WHERE pa.ticker IS NOT NULL),
-        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM us_applications u WHERE u.parent_id = a.parent_id)),
-        count(*) FILTER (WHERE {linkcond('usfda_actions', 'CAST(a.id AS VARCHAR)')}),
-        0
-        FROM usfda_actions a LEFT JOIN parents pa ON pa.id = a.parent_id WHERE a.country ILIKE '%india%'""")
-    P["P3 US FDA"] = dict(zip(["start (India)", "plant", "maker", "maker -> any group", "curated group (incl. via maker)", "group", "ticker", "US applications", "molecule (recalls)", "all hops (needs plant)"], r))
+    if "sites" not in tables:
+        c.execute("CREATE TEMP TABLE sites (site_key VARCHAR, maker_key VARCHAR, parent_id INTEGER)")
+    site_c = linkcond("usfda_actions", "CAST(a.id AS VARCHAR)", "site")
+    # curated group of the action: its own parent_id, or the group of the maker / of the site
+    grp = f"""coalesce(a.parent_id, (SELECT max(mk.parent_id) FROM hl JOIN makers mk ON mk.maker_key = hl.dst_id WHERE hl.src_table = 'usfda_actions'
+              AND hl.src_key = CAST(a.id AS VARCHAR) AND hl.dst_type = 'maker'))"""
+    c.execute(f"""CREATE TEMP TABLE p3 AS SELECT a.*, {grp} AS g, {site_c} AS has_site FROM usfda_actions a WHERE a.country ILIKE '%india%'""")
+    r = one(f"""SELECT count(*), count(*) FILTER (WHERE has_site),
+        count(*) FILTER (WHERE {mk_join.replace("a.id", "p3.id").format('')}),
+        count(*) FILTER (WHERE {mk_join.replace("a.id", "p3.id").format("AND (mk.parent_id IS NOT NULL OR mk.auto_group IS NOT NULL)")}),
+        count(*) FILTER (WHERE g IS NOT NULL),
+        count(*) FILTER (WHERE p3.parent_id IS NOT NULL OR {linkcond('usfda_actions', 'CAST(p3.id AS VARCHAR)', 'parent')}),
+        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM parents pa WHERE pa.id = g AND pa.ticker IS NOT NULL)),
+        count(*) FILTER (WHERE EXISTS (SELECT 1 FROM us_applications u WHERE u.parent_id = g)),
+        count(*) FILTER (WHERE {linkcond('usfda_actions', 'CAST(p3.id AS VARCHAR)')}),
+        count(*) FILTER (WHERE has_site AND EXISTS (SELECT 1 FROM parents pa WHERE pa.id = g AND pa.ticker IS NOT NULL)
+                         AND EXISTS (SELECT 1 FROM us_applications u WHERE u.parent_id = g))
+        FROM p3""")
+    P["P3 US FDA"] = dict(zip(["start (India)", "plant", "maker", "maker -> any group", "curated group (incl. via maker)", "group", "ticker", "US applications",
+                               "molecule (recalls)", "all hops"], r))
 
     # P4 tender -> molecule -> product -> maker -> quality record
     c.execute(f"""CREATE TEMP TABLE tmol AS SELECT {pr_key} k, company_id,

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router-dom";
 import { day, get, inr, num, type Row } from "../lib/api";
 import { Empty, ErrorBox, Kpi, Loading, Panel, Tabs } from "../components/ui";
-import { Inferred, useShowInferred } from "../components/Linked";
+import { Inferred, Plants, useShowInferred } from "../components/Linked";
 
 const ROLE: Record<string, string> = {
   batch_manufacturer: "NSQ batches", brand_licensee: "84AB brand registrations", us_fda_firm: "US FDA actions",
@@ -66,6 +66,7 @@ export default function MakerDetail() {
           <td title={d.drug_text}>{d.drug_text}</td><td className="mut">{d.reason}</td><td>{day(d.ordered_on)}</td><td><Inferred r={d} /></td></tr>)}</tbody></table> : <Empty>none</Empty>)}
         {m.cdci_suppliers > 0 && <div className="faint" style={{ marginTop: 6 }}>Also a CDCI supplier ({m.cdci_suppliers} supplier record{m.cdci_suppliers > 1 ? "s" : ""}).</div>}
       </Panel>
+      <Plants rows={m.sites} title="Sites" />
     </div>
   );
 }

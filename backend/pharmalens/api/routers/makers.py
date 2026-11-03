@@ -59,6 +59,8 @@ def maker(key: str):
                                             pa.name AS parent, pa.slug AS parent_slug
                                      FROM maker_makes_for f JOIN companies c ON c.id = f.company_id LEFT JOIN parents pa ON pa.id = c.parent_id
                                      WHERE f.maker_key = ? ORDER BY f.relation = 'own' DESC, f.skus DESC LIMIT 60""", [key])
+    from .sites import summary            # plant stage 2: this firm's sites
+    m["sites"] = summary(cur, "s.maker_key = ?", [key])
     return cleanrows([m])[0]
 
 

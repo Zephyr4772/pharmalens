@@ -71,9 +71,13 @@ CREATE TABLE IF NOT EXISTS maker_makes_for (   -- contract-manufacturing map fro
 UNIT_OF = re.compile(r"\(?\s*\ba\s+(?:unit|div(?:ision)?)\.?\s+of\b.*$", re.I)
 
 
+ROLE_PREFIX = re.compile(r"^\s*(?:m\s*/\s*s\.?\s*)?(?:supplied|manufactured|mfd|mfg|marketed|distributed|packed)\.?\s*(?:by|for)\s*[:.-]?\s*", re.I)
+
+
 def clean(name: str) -> str:
-    """Firm name without "(a unit / division of <owner>)": the owner is resolved separately (matcher.company_for)."""
-    return UNIT_OF.sub("", name or "").strip(" -(,")
+    """Firm name without a leading role ("Supplied by ...") or "(a unit / division of <owner>)"; the owner is resolved
+    separately (matcher.company_for)."""
+    return UNIT_OF.sub("", ROLE_PREFIX.sub("", name or "")).strip(" -(,")
 
 
 def _sql_links(w, linker: str, rows_sql: str) -> int:

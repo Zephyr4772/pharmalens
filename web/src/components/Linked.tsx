@@ -250,3 +250,23 @@ export function SkuNsq({ rows, title = "Quality record of this SKU", sub, showPr
     </Panel>
   );
 }
+
+export const siteHref = (k: string) => `/st/${encodeURIComponent(k)}`;
+
+// Plant stage 2: a firm's or group's manufacturing sites with their record counts.
+export function Plants({ rows, title = "Plants", sub, showMaker = false }: { rows: Row[] | undefined; title?: string; sub?: string; showMaker?: boolean }) {
+  if (!rows?.length) return null;
+  return (
+    <Panel title={title} sub={sub ?? "manufacturing sites by PIN code (abroad: postal code), from approval site lists, NSQ, US FDA and debarment addresses"}>
+      <table className="tt"><thead><tr>{showMaker && <th>Firm</th>}<th>Site</th><th>State</th><th className="num">Approvals</th><th className="num">NSQ</th>
+        <th className="num">US FDA</th><th className="num">Debarred</th><th>Last NSQ</th></tr></thead><tbody>
+        {rows.map((s) => <tr key={s.site_key}>
+          {showMaker && <td><Link to={`/mk/${encodeURIComponent(s.maker_key)}`}>{s.maker_name}</Link></td>}
+          <td><Link to={siteHref(s.site_key)} title={s.address}>{s.kind === "pin" ? `PIN ${s.pin}` : s.kind === "district" ? `${s.site_key.split("|")[1].split(":")[1]} (district)` : s.country}</Link>
+            {s.units && <span className="faint"> {s.units}</span>} <span className="faint">{s.locality?.split(", ").slice(0, 2).join(", ")}</span></td>
+          <td className="mut">{s.state ?? s.country}</td><td className="num">{s.approvals || ""}</td>
+          <td className={`num ${s.nsq ? "neg" : ""}`}>{s.nsq || ""}</td><td className={`num ${s.usfda ? "neg" : ""}`}>{s.usfda || ""}</td>
+          <td className={`num ${s.debarments ? "neg" : ""}`}>{s.debarments || ""}</td><td className="faint">{s.last_nsq ?? ""}</td></tr>)}</tbody></table>
+    </Panel>
+  );
+}

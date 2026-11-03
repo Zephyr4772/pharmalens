@@ -122,6 +122,7 @@ TABLES = {
     "auto_groups":          (["kaggle_nc", "drugden"], "company names come from the catalog"),
     "molecule_aliases":     (["kaggle_nc", "chembl", "drugden"], "molecule names from the catalog; ChEMBL ids share-alike"),
     "makers":               (["cdsco_web", "openfda", "cdci", "state_gov", "kaggle_nc", "drugden"], "firm names from every source; links carry their own licence"),
+    "sites":                (["cdsco_web", "openfda", "state_gov", "drugden"], "addresses from approvals, NSQ lists, US FDA, debarments"),
     "maker_makes_for":      (["cdsco_web", "kaggle_nc", "drugden"], "84AB registrations matched to catalog SKUs"),
 }
 
