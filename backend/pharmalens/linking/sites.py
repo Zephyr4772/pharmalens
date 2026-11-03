@@ -237,8 +237,10 @@ def run() -> dict:
             method_of[(table, sk, addr)] = ("same_fei", 0.95)
             info[key]["roles"][role] += 1
             continue
-        loc = locality(addr)
-        scores = [(len(loc & set(info[k]["loc"])), k) for k in by_maker.get(mk, [])]
+        loc = locality(addr) - set(mk[3:].split())     # the firm's own name in its street ("Dabur India Ltd, ...") is not a place
+        rec_state = state_of(addr)
+        scores = [(len(loc & set(info[k]["loc"])), k) for k in by_maker.get(mk, [])
+                  if not (rec_state and info[k]["state"] and rec_state not in info[k]["state"])]   # never across states
         scores = [x for x in scores if x[0] > 0]
         best = max((x[0] for x in scores), default=0)
         top = [k for n, k in scores if n == best]
