@@ -100,10 +100,15 @@ def _flags(r: dict) -> list[dict]:
         out.append({"level": "red", "label": "QUALITY", "why": f"{r['nsq_12m']} failed batches in 12m" + (f", {r['spurious_12m']} spurious" if r["spurious_12m"] else "")})
     elif r["nsq_12m"] >= 3:
         out.append({"level": "amber", "label": "QUALITY", "why": f"{r['nsq_12m']} failed batches in 12m"})
-    if r["fda_alerts_2y"]:
-        out.append({"level": "red", "label": "USFDA", "why": f"{_n(r['fda_alerts_2y'], 'import alert')} in 2y"})
-    elif r["fda_recalls_1y"]:
-        out.append({"level": "amber", "label": "USFDA", "why": f"{_n(r['fda_recalls_1y'], 'recall')} in 12m"})
+    # the group's own actions plus its plants' record (dossier scorecard thresholds: OAI or a warning letter in 2y is
+    # red, 10+ refused shipments in 12m amber)
+    red = [_n(r["fda_alerts_2y"], "import alert") + " in 2y"] if r["fda_alerts_2y"] else []
+    red += [_n(r["plant_oai_2y"], "OAI inspection") + " at plants in 2y"] if r["plant_oai_2y"] else []
+    red += [_n(r["plant_wl_2y"], "warning letter") + " at plants in 2y"] if r["plant_wl_2y"] else []
+    amber = [_n(r["fda_recalls_1y"], "recall") + " in 12m"] if r["fda_recalls_1y"] else []
+    amber += [f"{r['plant_refusals_1y']} refused shipments from plants in 12m"] if r["plant_refusals_1y"] >= 10 else []
+    if red or amber:
+        out.append({"level": "red" if red else "amber", "label": "USFDA", "why": ", ".join(red + amber)})
     if r["reg_actions"] >= 3:
         out.append({"level": "red", "label": "ORDERS", "why": f"{_n(r['reg_actions'], 'regulatory action')} disclosed in 12m"})
     elif r["reg_actions"]:
@@ -126,7 +131,11 @@ def companies_rows() -> list[dict]:
     cur = db.cursor()
     rows = db.rows(cur, COMPANIES_SQL)
     dpco = {p: (s, d) for p, s, d in cur.execute(DPCO_SQL).fetchall()}
+    from .sites import groups_fda
+    plants = groups_fda(cur)
     for r in rows:
+        pf = plants.get(r["id"], {})
+        r["plant_oai_2y"], r["plant_wl_2y"], r["plant_refusals_1y"] = pf.get("oai_2y", 0), pf.get("wl_2y", 0), pf.get("refusals_1y", 0)
         s, d = dpco.get(r["id"], (0, 0))
         r["skus"], r["dpco_share"] = s, (d / s * 100 if s else None)
         r["quarter"] = qlabel(r["period_end"])
@@ -276,6 +285,9 @@ def _group_row(pid: int) -> dict | None:
     r = rows[0]
     _, s, d = cur.execute(DPCO_SQL.replace("(SELECT id FROM parents WHERE ticker IS NOT NULL)", "(?)"), [pid]).fetchone() or (pid, 0, 0)
     r["skus"], r["dpco_share"] = s, (d / s * 100 if s else None)
+    from .sites import group_fda
+    pf = group_fda(cur, pid)
+    r["plant_oai_2y"], r["plant_wl_2y"], r["plant_refusals_1y"] = pf.get("oai_2y", 0), pf.get("wl_2y", 0), pf.get("refusals_1y", 0)
     r["quarter"] = qlabel(r["period_end"])
     r["quality_trend"] = "rising" if r["nsq_12m"] > r["nsq_prev"] else "falling" if r["nsq_12m"] < r["nsq_prev"] else "flat"
     r["flags"] = _flags(r)

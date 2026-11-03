@@ -477,9 +477,14 @@ def sanity(arg: str) -> list[Reply]:
     lines.append(f"{_signal(lvl)} Quality: {nsq_now} failed-batch listings in 12 months ({trend}; {nsq_prev} the year before)"
                  + (f", {spur} spurious" if spur else ""))
     # US regulator
-    lvl = "red" if ia else "amber" if rc else "green"
+    from ..api.routers.sites import group_fda
+    pf = group_fda(cur, pid)
+    lvl = ("red" if ia or pf.get("oai_2y") or pf.get("wl_2y") else
+           "amber" if rc or pf.get("refusals_1y", 0) >= 10 else "green")
     lines.append(f"{_signal(lvl)} US FDA: {ia} import alerts in 2 years, {rc} recalls in 12 months"
-                 + (f" (last import alert {last_ia})" if last_ia else ""))
+                 + (f" (last import alert {last_ia})" if last_ia else "")
+                 + (f"; plants: {pf['oai_2y']} OAI inspections and {pf['wl_2y']} warning letters in 2 years,"
+                    f" {pf['refusals_1y']} refused shipments in 12 months" if pf else ""))
     # Indian regulator / bans
     share = banned / skus * 100 if skus else 0
     lvl = "amber" if share > 1 else "green"

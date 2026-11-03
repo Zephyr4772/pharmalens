@@ -66,21 +66,33 @@ def _last_inspections(cur, keys: list[str]) -> dict[str, dict]:
     return out
 
 
-def group_fda(cur, parent_id: int) -> dict:
-    """US FDA plant record for a group's sites (high-confidence links): OAI inspections and warning letters in 2 years,
-    refused shipments in 12 months. Empty when the Data Dashboard feeds are not loaded."""
-    def one(select: str, table: str, key: str, when: str):
-        return cur.execute(f"""SELECT {select} FROM entity_links l JOIN sites s ON s.site_key = l.dst_id JOIN {table} t ON {key} = l.src_key
+def groups_fda(cur, parent_id: int | None = None) -> dict[int, dict]:
+    """US FDA plant record per group (high-confidence site links): OAI inspections and warning letters in 2 years,
+    refused shipments in 12 months. One group when parent_id is given, else every group with a record. Empty when the
+    Data Dashboard feeds are not loaded."""
+    def per(select: str, table: str, key: str, when: str) -> dict:
+        only = "AND s.parent_id = ?" if parent_id is not None else "AND s.parent_id IS NOT NULL"
+        rows = cur.execute(f"""SELECT s.parent_id, {select} FROM entity_links l JOIN sites s ON s.site_key = l.dst_id JOIN {table} t ON {key} = l.src_key
                                WHERE l.linker = 'site:records' AND l.src_table = '{table}' AND l.confidence >= {HIGH}
-                                 AND s.parent_id = ? AND {when}""", [parent_id]).fetchone()
+                                 {only} AND {when} GROUP BY 1""", [parent_id] if parent_id is not None else []).fetchall()
+        return {r[0]: r[1:] for r in rows}
     try:
-        oai, n = one("count(*) FILTER (WHERE t.classification ILIKE '%official action%'), count(*)", "fda_inspections", "t.inspection_id",
-                     "t.end_date >= current_date - INTERVAL 2 YEAR")
-        wl, last = one("count(*), max(t.action_date)", "fda_compliance_actions", "t.case_id", "t.action_date >= current_date - INTERVAL 2 YEAR")
-        ir = one("count(*)", "fda_import_refusals", "t.shipment_id || '|' || t.product_code", "t.refusal_date >= current_date - INTERVAL 1 YEAR")[0]
+        ins = per("count(*) FILTER (WHERE t.classification ILIKE '%official action%'), count(*)", "fda_inspections", "t.inspection_id",
+                  "t.end_date >= current_date - INTERVAL 2 YEAR")
+        wls = per("count(*), max(t.action_date)", "fda_compliance_actions", "t.case_id", "t.action_date >= current_date - INTERVAL 2 YEAR")
+        irs = per("count(*)", "fda_import_refusals", "t.shipment_id || '|' || t.product_code", "t.refusal_date >= current_date - INTERVAL 1 YEAR")
     except Exception:  # noqa: BLE001 — Data Dashboard feeds not loaded yet
         return {}
-    return {"oai_2y": oai, "inspections_2y": n, "wl_2y": wl, "last_wl": last, "refusals_1y": ir}
+    out = {}
+    for p in ({parent_id} if parent_id is not None else set(ins) | set(wls) | set(irs)):
+        oai, n = ins.get(p, (0, 0))
+        wl, last = wls.get(p, (0, None))
+        out[p] = {"oai_2y": oai, "inspections_2y": n, "wl_2y": wl, "last_wl": last, "refusals_1y": irs.get(p, (0,))[0]}
+    return out
+
+
+def group_fda(cur, parent_id: int) -> dict:
+    return groups_fda(cur, parent_id).get(parent_id, {})
 
 
 @router.get("/{key:path}")
