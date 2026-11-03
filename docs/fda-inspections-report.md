@@ -84,5 +84,10 @@ events were raised for history.
 - **Memory:** the entity linker ran out of DuckDB memory (600 MB cap) twice after a feed ran in the same process. A
   container restart fixed it, and the deploys since have each started fresh. Watch the 05:10 linker on Wednesday,
   after Tuesday's FDA feeds.
-- **Screener flags:** these still use import alerts and recalls only. The plant record shows on the dossier
-  scorecard, not yet in the screener's per-row flags.
+
+## Screener flags (same day)
+The screener's USFDA badge and the bot's `/sanity` check now include the plants' record, using the scorecard's
+thresholds: an OAI inspection or warning letter at a group plant in 2 years is red, 10 or more refused shipments in
+12 months amber. The row also carries `plant_oai_2y`, `plant_wl_2y` and `plant_refusals_1y` (in the CSV too). On the
+first run 13 of 48 listed groups gained or upgraded the badge: red for Sun, Zydus, Aurobindo, Lupin, Glenmark,
+Granules and Indoco; amber for Torrent, Cipla, Alkem, Abbott India, Ipca and RPG Life Sciences (refusals).
