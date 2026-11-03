@@ -27,6 +27,7 @@ DROP = RAW_DIR / "fda_dashboard"
 # loose column names -> ours
 ALIASES = {
     "inspection_id": ["inspectionid"], "fei": ["feinumber", "fei"], "firm": ["legalname", "firmname", "firm"],
+    "address": ["addressline1", "address"],
     "city": ["city", "cityname"], "state": ["state", "statecode", "statename", "inspectionstate"], "zip": ["zip", "zipcode", "postalcode"],
     "country": ["countryarea", "country", "countryname", "countrycode"], "end_date": ["inspectionenddate", "enddate"],
     "classification": ["classification", "inspectionclassification"], "product_type": ["producttype"], "project_area": ["projectarea", "programarea"],
