@@ -33,6 +33,7 @@ ida sidcul ltd limited pvt private unit block survey sy khasra floor building co
 behind main cross lane street st the and of at in india state town city new old ground first second third m s ms co""".split()) | {s for st in STATES for s in st.split()}
 PIN = re.compile(r"(?<!\d)([1-8]\d{2})\s?-?\s?(\d{3})(?!\d)")
 FOREIGN = re.compile(r"\b([A-Za-z][A-Za-z .()]+?)\s*-\s*([A-Za-z0-9][A-Za-z0-9 -]{2,11})\s*$")
+PERSON = re.compile(r"^\s*(?:dr|mr|mrs|ms|prof)\.?\s|\b(?:m\.?\s?d|ph\.?\s?d|mbbs)\.?\s*$", re.I)   # BIMO clinical investigators
 NOT_A_FIRM = re.compile(r"^\s*(?:other\s+site|site|plant|factory|manufacturing\s+site|address|plot|unit|premises)\b", re.I)
 
 DDL = """
@@ -127,9 +128,12 @@ def run() -> dict:
         for iid, fei, firm, street, cty, st, z, ctry in cur.execute("""SELECT inspection_id, fei, firm, address, city, state, zip, country
                                                                       FROM fda_inspections""").fetchall():
             india = bool(re.search(r"india", ctry or "", re.I))
-            addr = (f"{street or ''}, {cty or ''}, {st or ''} {z or ''}, India" if india
+            mk = mk_from(firm)
+            if PERSON.search(firm or "") or not (india or mk in makers):
+                continue           # clinical investigators are people, not plants; abroad only for firms already known as makers
+            addr =(f"{street or ''}, {cty or ''}, {st or ''} {z or ''}, India" if india
                     else f"{street or ''}, {cty or ''}, {st or ''}, {ctry or ''}-{z or ''}")
-            recs.append(("fda_inspections", str(iid), mk_from(firm), addr, "us_fda_inspection", "India" if india else (ctry or "")))
+            recs.append(("fda_inspections", str(iid), mk, addr, "us_fda_inspection", "India" if india else (ctry or "")))
             fei_of[("fda_inspections", str(iid))] = fei
     except Exception:  # noqa: BLE001 — feed not loaded yet
         pass
@@ -206,6 +210,20 @@ def run() -> dict:
         s["roles"][role] += 1
         if st:
             s["state"][st] += 1
+    # pass 3: an FEI is FDA's id for one establishment, so inspections sharing it share the site, when the placed ones agree
+    by_fei: dict[str, set] = defaultdict(set)
+    for (table, sk, addr), key in site_of.items():
+        if fei_of.get((table, sk)):
+            by_fei[fei_of[(table, sk)]].add(key)
+    for table, sk, mk, addr, role, country in pending:
+        f = fei_of.get((table, sk))
+        if (table, sk, addr) in site_of or not f or len(by_fei.get(f, ())) != 1:
+            continue
+        key = next(iter(by_fei[f]))
+        site_of[(table, sk, addr)] = key
+        method_of[(table, sk, addr)] = ("same_fei", 0.95)
+        info[key]["roles"][role] += 1
+        info[key]["fei"].add(f)
     rows = []
     for k, s in info.items():
         n, cid, pid, ag, dist_ = makers.get(s["maker_key"], (None, None, None, None, True))
