@@ -5,6 +5,7 @@ from .health import HealthWatch
 from .briefing import Briefing
 from .results_desk import ResultsPreview, ResultsSummary, WeeklyDigest
 from .linker import EntityLinker
+from .fda_inspections import FdaInspections
 from .name_index import NameIndex
 from .financials import NseResults
 from .procurement_safety import FdaImportAlert6640, HmsclRates, PvpiAlerts, RmsclRates, TnmscRates, UpmsclDebarments, WhoAlerts
@@ -29,5 +30,5 @@ REGISTRY = {c.name: c for c in [
     CdscoNsqPortal, CdscoApprovalsDb, CdscoBrandRegistry,
     OpenFdaBulk, WhoPrequal, EmaMedicines, NseFilings, Cdci,
     ParentSync, NppaHistory, PvpiAlerts, RmsclRates, TnmscRates, HmsclRates, UpmsclDebarments, WhoAlerts, FdaImportAlert6640, MoleculeEnrichment,
-    AlertsDispatch, HealthWatch, Briefing, NameIndex, ResultsPreview, ResultsSummary, WeeklyDigest, EntityLinker,
+    AlertsDispatch, HealthWatch, Briefing, NameIndex, ResultsPreview, ResultsSummary, WeeklyDigest, EntityLinker, FdaInspections,
 ]}

@@ -34,7 +34,25 @@ def summary(cur, where: str, args: list, limit: int = 60) -> list[dict]:
         return []
     for r in rows:
         r["roles"] = json.loads(r["roles"] or "{}")
+    last = _last_inspections(cur, [r["site_key"] for r in rows])
+    for r in rows:
+        r.update(last.get(r["site_key"], {}))
     return cleanrows(rows)
+
+
+def _last_inspections(cur, keys: list[str]) -> dict[str, dict]:
+    """Latest US FDA inspection per site (classification, date, 483 citations), when the inspections feed is loaded."""
+    if not keys:
+        return {}
+    try:
+        rows = cur.execute(f"""SELECT l.dst_id, arg_max(i.classification, i.end_date), max(i.end_date), count(*),
+                                      count(*) FILTER (WHERE i.classification ILIKE '%official action%')
+                               FROM entity_links l JOIN fda_inspections i ON i.inspection_id = l.src_key
+                               WHERE l.linker = 'site:records' AND l.src_table = 'fda_inspections' AND l.dst_id IN ({','.join('?' * len(keys))})
+                               GROUP BY 1""", keys).fetchall()
+    except Exception:  # noqa: BLE001 — inspections feed not loaded yet
+        return {}
+    return {k: {"last_inspection_class": c, "last_inspection": d, "inspections": n, "oai": o} for k, c, d, n, o in rows}
 
 
 @router.get("/{key:path}")
@@ -53,5 +71,14 @@ def site(key: str):
     s["approvals"] = _recs(cur, "reg_approvals", "t.approved_on, t.drug_text, t.approval_type, t.applicant, t.source_url", "CAST(t.id AS VARCHAR)", key,
                            "t.approved_on DESC NULLS LAST")
     s["debarments"] = _recs(cur, "firm_debarments", "t.state, t.drug_text, t.reason, t.ordered_on, t.years", "t.dedupe_key", key, "t.ordered_on DESC NULLS LAST")
+    try:
+        s["inspections"] = _recs(cur, "fda_inspections", """t.inspection_id, t.fei, t.end_date, t.classification, t.project_area, t.posted_citations,
+                                 (SELECT count(*) FROM fda_citations c WHERE c.inspection_id = t.inspection_id) AS citations""",
+                                 "t.inspection_id", key, "t.end_date DESC NULLS LAST")
+        s["citations"] = db.rows(cur, """SELECT c.inspection_id, c.end_date, c.act_cfr, c.short_desc, c.long_desc FROM fda_citations c
+                                         WHERE c.inspection_id IN (SELECT src_key FROM entity_links WHERE linker = 'site:records'
+                                         AND src_table = 'fda_inspections' AND dst_id = ?) ORDER BY c.end_date DESC LIMIT 80""", [key])
+    except Exception:  # noqa: BLE001 — inspections feed not loaded yet
+        s["inspections"], s["citations"] = [], []
     s["other_sites"] = summary(cur, "s.maker_key = ? AND s.site_key <> ?", [s["maker_key"], key], 30)
     return cleanrows([s])[0]

@@ -119,6 +119,15 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 - Terminal: `/` is now Today (key 1), `/companies` the screener (2); the old home moved to `/market` (3). Rail keys
   were renumbered (NEWS n, SHELF s, FEED f).
 
+## US FDA inspections (2026-11-03): waiting for data
+- Feed `fda_inspections` (weekly, Tue 06:40) loads drug inspections (NAI / VAI / OAI) and Form 483 citations from the
+  FDA Data Dashboard into `fda_inspections` / `fda_citations`, and raises a `usfda` event for each new OAI inspection
+  of an Indian firm. The sites linker matches each inspection to a site by firm + ZIP (an Indian ZIP is the PIN) and
+  records FEI numbers on sites; site pages, maker sites and group plants show the latest classification.
+- It needs one of: `FDA_DD_USER` + `FDA_DD_KEY` in the server .env (key requested via FDA's OII Unified Logon), or the
+  dashboard's "Entire Inspections Dataset" and "Entire Citations Dataset" .xlsx files in `data/raw/fda_dashboard/` on
+  the server. Scripting the dashboard's own Qlik export was refused as access circumvention: do not retry that.
+
 ## Specs, the Telegram bot (2026-10-29)
 - `bot/telegram.py` long-polls (messages + button taps), routes `/commands` to `bot/commands.py`, everything else to
   the agent (Gemini 3 flash -> 2.5 flash-lite -> Groq; tools in `bot/tools.py`). `deliver()` sends text with inline

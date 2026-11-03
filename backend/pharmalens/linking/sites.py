@@ -6,6 +6,7 @@ Units of one firm that share a PIN are one site here; their unit labels are kept
   reg_nsq.manufacturer       the site whose batch failed (firm name + address)
   firm_debarments.address    the debarred firm's address
   usfda_actions              import-alert address (subject) / recall city (event payload): these carry no PIN
+  fda_inspections            US FDA inspection (FEI, firm, city, state, ZIP: an Indian ZIP is the PIN), when loaded
 Records with a PIN link to their site at 0.9 (the site is defined by the record's own address). Records without one
 link to the maker's PIN site whose address shares their locality words when exactly one such site exists (0.85,
 locality_match); otherwise to a district-level site of that maker (0.85, district_site: "this firm's plant in district
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS sites (
     parent_id   INTEGER,
     auto_group  VARCHAR
 );
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS fei VARCHAR;   -- US FDA establishment ids seen for this site (inspections feed)
 """
 
 
@@ -120,6 +122,15 @@ def run() -> dict:
         recs.append(("reg_nsq", str(nid), maker_link.get(("reg_nsq", str(nid))), mf, "batch_site", "India"))
     for key, firm, addr in cur.execute("SELECT dedupe_key, firm, address FROM firm_debarments WHERE address IS NOT NULL").fetchall():
         recs.append(("firm_debarments", key, maker_link.get(("firm_debarments", key)) or mk_from(firm), addr, "debarred_site", "India"))
+    fei_of: dict[tuple, str] = {}
+    try:   # US FDA inspections (fda_inspections feed): FEI + firm + city / state / ZIP; an Indian ZIP is the PIN
+        for iid, fei, firm, cty, st, z, ctry in cur.execute("""SELECT inspection_id, fei, firm, city, state, zip, country FROM fda_inspections""").fetchall():
+            india = bool(re.search(r"india", ctry or "", re.I))
+            addr = f"{cty or ''}, {st or ''} {z or ''}, India" if india else f"{cty or ''}, {st or ''}, {ctry or ''}-{z or ''}"
+            recs.append(("fda_inspections", str(iid), mk_from(firm), addr, "us_fda_inspection", "India" if india else (ctry or "")))
+            fei_of[("fda_inspections", str(iid))] = fei
+    except Exception:  # noqa: BLE001 — feed not loaded yet
+        pass
     city = dict(cur.execute("""SELECT split_part(dedupe_key, '|', 2), json_extract_string(payload, '$.city') FROM events
                                WHERE dedupe_key LIKE 'fda|recall-%'""").fetchall())
     for aid, kind, firm, country, subject in cur.execute("SELECT id, kind, firm, country, subject FROM usfda_actions").fetchall():
@@ -140,7 +151,7 @@ def run() -> dict:
         key = kind = None
         if foreign:
             m = FOREIGN.search(addr)
-            if m and table == "reg_approvals":
+            if m and table in ("reg_approvals", "fda_inspections"):
                 ctry = norm(m.group(1)).split()[-1] if norm(m.group(1)) else ""
                 key, kind, country = f"st:{mk[3:]}|{ctry}:{norm(m.group(2)).replace(' ', '')}", "foreign_postal", m.group(1).strip()
         else:
@@ -150,7 +161,9 @@ def run() -> dict:
         if key:
             site_of[(table, sk, addr)] = key
             s = info.setdefault(key, {"maker_key": mk, "kind": kind, "country": country, "pin": key.split("|")[1] if kind == "pin" else None,
-                                      "addr": Counter(), "loc": Counter(), "units": set(), "roles": Counter(), "state": Counter()})
+                                      "addr": Counter(), "loc": Counter(), "units": set(), "roles": Counter(), "state": Counter(), "fei": set()})
+            if fei_of.get((table, sk)):
+                s["fei"].add(fei_of[(table, sk)])
             s["addr"][addr.strip()[:200]] += 1
             s["loc"].update(locality(addr))
             s["roles"][role] += 1
@@ -185,7 +198,7 @@ def run() -> dict:
         site_of[(table, sk, addr)] = key
         method_of[(table, sk, addr)] = ("district_site", 0.85)
         s = info.setdefault(key, {"maker_key": mk, "kind": "district", "country": "India", "pin": None, "addr": Counter(), "loc": Counter(),
-                                  "units": set(), "roles": Counter(), "state": Counter()})
+                                  "units": set(), "roles": Counter(), "state": Counter(), "fei": set()})
         s["addr"][addr.strip()[:200]] += 1
         s["loc"].update(loc)
         s["roles"][role] += 1
@@ -198,6 +211,7 @@ def run() -> dict:
                      "pin": s["pin"], "state": s["state"].most_common(1)[0][0].title() if s["state"] else None,
                      "locality": ", ".join(w for w, _ in s["loc"].most_common(6)), "address": s["addr"].most_common(1)[0][0],
                      "units": ", ".join(sorted(s["units"])) or None, "records": sum(s["roles"].values()), "roles": json.dumps(dict(s["roles"])),
+                     "fei": ", ".join(sorted(s.get("fei", set()))) or None,
                      "company_id": cid, "parent_id": pid, "auto_group": ag})
     sdf = pd.DataFrame(rows)
     links = []
@@ -212,8 +226,10 @@ def run() -> dict:
     with db.writer() as w:
         w.execute("DELETE FROM sites").fetchall()
         w.register("_s", sdf)
-        w.execute("""INSERT INTO sites SELECT site_key, maker_key, maker_name, kind, country, pin, state, locality, address, units, records::INTEGER, roles,
-                     company_id::INTEGER, parent_id::INTEGER, auto_group FROM _s""").fetchall()
+        w.execute("""INSERT INTO sites (site_key, maker_key, maker_name, kind, country, pin, state, locality, address, units, records, roles,
+                     company_id, parent_id, auto_group, fei)
+                     SELECT site_key, maker_key, maker_name, kind, country, pin, state, locality, address, units, records::INTEGER, roles,
+                     company_id::INTEGER, parent_id::INTEGER, auto_group, fei FROM _s""").fetchall()
         w.unregister("_s")
         w.execute("DELETE FROM entity_links WHERE linker = 'site:records'").fetchall()
         w.register("_l", ldf)

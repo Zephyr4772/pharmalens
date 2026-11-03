@@ -33,6 +33,8 @@ export default function SiteDetail() {
         <Kpi label="NSQ / spurious batches" value={num(s.nsq.length)} tone={s.nsq.length ? "down" : undefined} />
         <Kpi label="US FDA actions" value={num(s.usfda.length)} tone={s.usfda.length ? "down" : undefined} />
         <Kpi label="Debarments" value={num(s.debarments.length)} tone={s.debarments.length ? "down" : undefined} />
+        <Kpi label="US FDA inspections" value={num(s.inspections?.length ?? 0)} sub={s.inspections?.[0] ? `last ${s.inspections[0].end_date}: ${s.inspections[0].classification}` : "none loaded"}
+          tone={s.inspections?.some((i: Row) => /official/i.test(i.classification)) ? "down" : undefined} />
       </div>
       <Panel title="Records at this site" sub="matched on the address (PIN code); without a PIN, on the firm's locality words; hover ⓘ for the method"
         right={<div style={{ display: "flex", gap: 10 }}>{toggle}<Tabs value={tab} onChange={setTab} tabs={[["nsq", `NSQ ${s.nsq.length}`], ["fda", `US FDA ${s.usfda.length}`],
@@ -47,6 +49,16 @@ export default function SiteDetail() {
         {tab === "debar" && (keep(s.debarments).length ? <table className="tt"><tbody>{keep(s.debarments).map((d: Row, i: number) => <tr key={i}><td>{d.state}</td>
           <td title={d.drug_text}>{d.drug_text}</td><td className="mut">{d.reason}</td><td>{day(d.ordered_on)}</td><td><Inferred r={d} /></td></tr>)}</tbody></table> : <Empty>none</Empty>)}
       </Panel>
+      {s.inspections?.length > 0 && (
+        <Panel title="US FDA inspections" sub="FDA Data Dashboard: classification of each inspection; citations are Form 483 observations">
+          <table className="tt"><thead><tr><th>Ended</th><th>Classification</th><th>Project</th><th>FEI</th><th className="num">483 citations</th><th /></tr></thead><tbody>
+            {s.inspections.map((i: Row) => <tr key={i.inspection_id}><td>{day(i.end_date)}</td>
+              <td><span className={`badge ${/official/i.test(i.classification) ? "b-down" : /voluntary/i.test(i.classification) ? "b-warn" : "b-up"}`}>{i.classification}</span></td>
+              <td className="mut">{i.project_area}</td><td className="faint">{i.fei}</td><td className="num">{i.citations || ""}</td><td><Inferred r={i} /></td></tr>)}</tbody></table>
+          {s.citations?.length > 0 && <table className="tt" style={{ marginTop: 8 }}><tbody>{s.citations.map((c: Row, j: number) => <tr key={j}>
+            <td>{day(c.end_date)}</td><td className="amb">{c.act_cfr}</td><td title={c.long_desc}>{c.short_desc}</td></tr>)}</tbody></table>}
+        </Panel>
+      )}
       <Plants rows={s.other_sites} title="Other sites of this firm" />
     </div>
   );

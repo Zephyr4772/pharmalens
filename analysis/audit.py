@@ -159,6 +159,11 @@ def main(path: str, out: str | None = None) -> dict:
         n_s, n_pin, n_grp = one("SELECT count(*), count(*) FILTER (WHERE kind = 'pin'), count(*) FILTER (WHERE parent_id IS NOT NULL) FROM sites")
         C["sites (PIN-keyed / in a curated group)"] = {"n": n_s, "linked": n_pin, "pct": pct(n_pin, n_s)}
         C["sites in a curated group"] = {"n": n_s, "linked": n_grp, "pct": pct(n_grp, n_s)}
+    if "fda_inspections" in tables:
+        cov("US FDA inspection (India) -> site", "fda_inspections i", linkcond("fda_inspections", "i.inspection_id", "site"), "country ILIKE '%india%'")
+        cov("sites with a US FDA inspection", "sites s", "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'fda_inspections' AND hl.dst_id = s.site_key)")
+        cov("curated-group sites with a US FDA inspection", "sites s",
+            "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'fda_inspections' AND hl.dst_id = s.site_key)", "parent_id IS NOT NULL")
     # ---- NSQ batch -> SKU (#7)
     cov("NSQ batch -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"))
     cov("NSQ batch since 2025 -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"), "alert_month >= '2025-01'")
