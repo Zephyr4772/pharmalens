@@ -60,9 +60,29 @@ ALTER TABLE sites ADD COLUMN IF NOT EXISTS fei VARCHAR;   -- US FDA establishmen
 """
 
 
+def _r(a, b):
+    return {str(x) for x in range(a, b + 1)}
+
+
+# a PIN's first two digits by state (India Post zones); old Andhra addresses keep Hyderabad's 50
+PIN_STATE = {"delhi": {"11"}, "haryana": {"12", "13"}, "punjab": {"14", "15", "16"}, "chandigarh": {"16"}, "himachal pradesh": {"17"},
+             "jammu and kashmir": {"18", "19"}, "jammu": {"18", "19"}, "ladakh": {"19"}, "uttar pradesh": _r(20, 28), "uttarakhand": {"24", "26"},
+             "uttaranchal": {"24", "26"}, "rajasthan": _r(30, 34), "gujarat": _r(36, 39), "daman": {"39"}, "dadra": {"39"},
+             "maharashtra": _r(40, 44), "goa": {"40"}, "madhya pradesh": _r(45, 48), "chhattisgarh": {"49"}, "telangana": {"50"},
+             "andhra pradesh": _r(50, 53), "karnataka": _r(56, 59), "tamil nadu": _r(60, 64), "puducherry": {"60", "53", "67"},
+             "pondicherry": {"60", "53", "67"}, "kerala": _r(67, 69), "west bengal": _r(70, 74), "sikkim": {"73"}, "odisha": _r(75, 77),
+             "orissa": _r(75, 77), "assam": {"78"}, "arunachal pradesh": {"79"}, "manipur": {"79"}, "meghalaya": {"79"}, "mizoram": {"79"},
+             "nagaland": {"79"}, "tripura": {"79"}, "bihar": _r(80, 85), "jharkhand": _r(80, 85)}
+
+
 def pin_of(text: str) -> str | None:
-    m = list(PIN.finditer(text or ""))
-    return m[-1].group(1) + m[-1].group(2) if m else None
+    """The last PIN-shaped number that fits a state the address names ("4-1-424-426 Bank Street, Hyderabad, Telangana" has none)."""
+    m = [x.group(1) + x.group(2) for x in PIN.finditer(text or "")]
+    t = f" {norm(text)} "
+    ok = set().union(*[v for s, v in PIN_STATE.items() if f" {s} " in t])
+    if ok:
+        m = [p for p in m if p[:2] in ok]
+    return m[-1] if m else None
 
 
 def state_of(text: str) -> str | None:
@@ -226,12 +246,21 @@ def run() -> dict:
             by_maker[s["maker_key"]].append(k)
     method_of: dict[tuple, tuple[str, float]] = {}
     fei_sites: dict[str, set] = defaultdict(set)      # FEI -> sites placed so far (FDA's establishment id: one plant)
+
+    def fits(addr, mk, key):
+        """FDA files one FEI under different addresses now and then: join by FEI only when the record's place agrees with the site's."""
+        s, st = info[key], state_of(addr)
+        if st and s["state"] and st not in s["state"]:
+            return False
+        loc = locality(addr) - set(mk[3:].split())
+        return not loc or not s["loc"] or bool(loc & set(s["loc"]))
+
     for (table, sk, addr), key in site_of.items():
         if fei_of.get((table, sk)):
             fei_sites[fei_of[(table, sk)]].add(key)
     for table, sk, mk, addr, role, country in pending:
         f = fei_of.get((table, sk))
-        if f and len(fei_sites.get(f, ())) == 1:
+        if f and len(fei_sites.get(f, ())) == 1 and fits(addr, mk, next(iter(fei_sites[f]))):
             key = next(iter(fei_sites[f]))
             site_of[(table, sk, addr)] = key
             method_of[(table, sk, addr)] = ("same_fei", 0.95)
@@ -276,7 +305,7 @@ def run() -> dict:
             by_fei[fei_of[(table, sk)]].add(key)
     for table, sk, mk, addr, role, country in pending:
         f = fei_of.get((table, sk))
-        if (table, sk, addr) in site_of or not f or len(by_fei.get(f, ())) != 1:
+        if (table, sk, addr) in site_of or not f or len(by_fei.get(f, ())) != 1 or not fits(addr, mk, next(iter(by_fei[f]))):
             continue
         key = next(iter(by_fei[f]))
         site_of[(table, sk, addr)] = key
