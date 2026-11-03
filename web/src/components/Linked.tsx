@@ -226,3 +226,27 @@ export function RegisteredMaker({ rows }: { rows: Row[] | undefined }) {
     </Panel>
   );
 }
+
+const NSQ_METHOD: Record<string, string> = {
+  brand_set_maker: "brand + ingredients + maker", counterfeit_of_brand: "spurious copy of this brand", maker_set_unique: "maker + ingredients + strength",
+  brand_set_other_maker: "brand + ingredients, different maker", brand_strength_unknown: "brand, strength not stated", maker_set_one_of_n: "one of several SKUs by this maker",
+  maker_set_no_strength: "maker + ingredients, strength not stated", brand_not_in_catalog: "maker's other brand",
+};
+
+// Failed / spurious batches linked to SKUs (#7): on a product (this SKU) or a marketer / group (its SKUs, whoever made them).
+export function SkuNsq({ rows, title = "Quality record of this SKU", sub, showProduct = false }: { rows: Row[] | undefined; title?: string; sub?: string; showProduct?: boolean }) {
+  const { toggle, keep } = useShowInferred();
+  if (!rows?.length) return null;
+  const shown = keep(rows);
+  return (
+    <Panel title={title} sub={sub ?? "NSQ / spurious batches matched to this SKU on brand, ingredients, strength and manufacturer; hover ⓘ for the evidence"} right={toggle}>
+      {shown.length ? <table className="tt"><tbody>{shown.map((n, i) => <tr key={i}><td>{n.alert_month}</td>
+        <td><span className={`badge ${n.category === "SPURIOUS" ? "b-down" : "b-warn"}`}>{n.category}</span></td>
+        {showProduct && <td><Link to={`/p/${n.product_id}`}>{n.product}</Link></td>}
+        <td title={n.product_text}>{n.product_text}</td><td className="amb">{n.batch_no}</td>
+        <td className="mut" title={n.manufacturer}>{String(n.manufacturer ?? "").split(",")[0]}</td>
+        <td className="faint">{NSQ_METHOD[n.method] ?? n.method}</td><td><Inferred r={n} /></td></tr>)}</tbody></table>
+        : <div className="empty">only inferred matches: tick “show inferred”</div>}
+    </Panel>
+  );
+}

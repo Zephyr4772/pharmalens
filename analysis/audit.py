@@ -151,6 +151,15 @@ def main(path: str, out: str | None = None) -> dict:
     C["maker -> marketer pairs (contract / same group / own)"] = {
         "n": one("SELECT count(*) FROM maker_makes_for")[0], "linked": one("SELECT count(*) FROM maker_makes_for WHERE relation = 'contract'")[0],
         "pct": pct(one("SELECT count(*) FROM maker_makes_for WHERE relation = 'contract'")[0], one("SELECT count(*) FROM maker_makes_for")[0])}
+    # ---- NSQ batch -> SKU (#7)
+    cov("NSQ batch -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"))
+    cov("NSQ batch since 2025 -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"), "alert_month >= '2025-01'")
+    cov("NSQ batch -> listed group via its SKU's marketer", "reg_nsq n",
+        """EXISTS (SELECT 1 FROM hl JOIN products p ON CAST(p.id AS VARCHAR) = hl.dst_id JOIN companies c ON c.id = p.company_id
+                   JOIN parents pa ON pa.id = c.parent_id
+                   WHERE hl.src_table = 'reg_nsq' AND hl.src_key = CAST(n.id AS VARCHAR) AND hl.dst_type = 'product' AND pa.ticker IS NOT NULL)""")
+    R["inferred"]["NSQ batch -> SKU (inferred only)"] = one(f"""SELECT count(DISTINCT src_key) FROM entity_links WHERE linker = 'nsq:product'
+        AND src_key NOT IN (SELECT src_key FROM entity_links WHERE linker = 'nsq:product' AND confidence >= {HIGH})""")[0]
     cov("company -> group (curated)", "companies", "parent_id IS NOT NULL")
     cov("company -> group (curated or auto)", "companies c",
         f"parent_id IS NOT NULL OR {linkcond('companies', 'CAST(c.id AS VARCHAR)', 'auto_group')}")
@@ -194,7 +203,20 @@ def main(path: str, out: str | None = None) -> dict:
              AND w.published_at BETWEEN strptime(n.alert_month || '-01', '%Y-%m-%d') - INTERVAL 30 DAY AND strptime(n.alert_month || '-01', '%Y-%m-%d') + INTERVAL 60 DAY))
         FROM reg_nsq n LEFT JOIN companies c ON c.id = n.company_id LEFT JOIN parents pa ON pa.id = c.parent_id
         WHERE n.alert_month >= '2025-01'""")
+    r2 = one("""WITH sk AS (SELECT n.id, n.alert_month, n.molecule_ids, n.company_id AS maker_company, pa.id pid, pa.ticker
+                             FROM reg_nsq n JOIN hl ON hl.src_table = 'reg_nsq' AND hl.src_key = CAST(n.id AS VARCHAR) AND hl.dst_type = 'product'
+                             JOIN products p ON CAST(p.id AS VARCHAR) = hl.dst_id LEFT JOIN companies c ON c.id = p.company_id
+                             LEFT JOIN parents pa ON pa.id = c.parent_id WHERE n.alert_month >= '2025-01'),
+             one_per AS (SELECT id, any_value(alert_month) alert_month, any_value(molecule_ids) molecule_ids, max(pid) pid, max(ticker) ticker FROM sk GROUP BY id)
+        SELECT count(*), count(pid), count(ticker),
+          count(*) FILTER (WHERE ticker IS NOT NULL AND molecule_ids IS NOT NULL AND EXISTS (SELECT 1 FROM quote_history h WHERE h.ticker = one_per.ticker || '.NS'
+              AND h.d BETWEEN strptime(one_per.alert_month || '-01', '%Y-%m-%d') AND strptime(one_per.alert_month || '-01', '%Y-%m-%d') + INTERVAL 45 DAY)
+            AND EXISTS (SELECT 1 FROM news w WHERE list_contains(string_split(w.parent_ids, ','), CAST(one_per.pid AS VARCHAR))
+              AND w.published_at BETWEEN strptime(one_per.alert_month || '-01', '%Y-%m-%d') - INTERVAL 30 DAY AND strptime(one_per.alert_month || '-01', '%Y-%m-%d') + INTERVAL 60 DAY))
+        FROM one_per""")
     P["P1 NSQ"] = dict(zip(["start", "product (resolvable)", "molecule", "maker", "group", "group (incl. auto)", "group (curated, via maker)", "ticker", "price window", "news", "all hops"], r))
+    P["P1 NSQ"].update({"SKU (linked, high)": r2[0], "group via SKU marketer": r2[1], "ticker via SKU marketer": r2[2],
+                        "all hops via SKU": r2[3]})
 
     # P2 SEC -> molecule -> approval -> brand registration -> NPPA price -> first listing (SEC since 2024)
     c.execute(f"""CREATE TEMP TABLE sec2 AS SELECT id, meeting_date, sortset(molecule_ids) s FROM sec_items
@@ -264,7 +286,8 @@ def main(path: str, out: str | None = None) -> dict:
 
     for k, v in P.items():
         vals = list(v.values())
-        v["end_to_end_pct"] = pct(vals[-1], vals[0])
+        v["end_to_end_pct"] = pct(v.get("all hops", vals[-1]), vals[0])
+    P["P1 NSQ"]["end_to_end_via_sku_pct"] = pct(P["P1 NSQ"]["all hops via SKU"], P["P1 NSQ"]["start"])
     R["link_totals"] = [dict(zip(["linker", "links", "high"], x)) for x in c.execute(
         f"SELECT linker, count(*), count(*) FILTER (WHERE confidence >= {HIGH}) FROM entity_links GROUP BY 1 ORDER BY 1").fetchall()]
     if out:

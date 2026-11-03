@@ -6,6 +6,7 @@ import { Dossier } from "../components/Dossier";
 import { Empty, ErrorBox, EventRow, Kpi, LineChart, Loading, Panel, Star, Tabs } from "../components/ui";
 import { Outcome } from "./Pipeline";
 import { Flags } from "./Companies";
+import { SkuNsq } from "../components/Linked";
 import { Debarments, Filings, Licences, Tenders, UsPortfolio } from "../components/Depth";
 
 type Tab = "overview" | "fin" | "risk" | "pipe" | "port";
@@ -220,6 +221,8 @@ function Risk({ d, v }: { d: Row; v: Row }) {
           {d.usfda.length ? d.usfda.map((u: Row, i: number) => <div className="ev" key={i}><span className="ev-time">{day(u.issued_on)}</span><span className="ev-title" title={u.subject}>{u.subject}</span></div>) : <div className="empty">none on record</div>}
         </Panel>
       </div>
+      <SkuNsq rows={v.nsq_via_sku} showProduct title="Failed batches of this group's SKUs"
+        sub="NSQ / spurious batches matched to the group's SKUs on brand, ingredients, strength and manufacturer, including contract-made batches" />
       <Dossier d={d} part="quality" />
       <Debarments rows={d.debarments} />
     </>

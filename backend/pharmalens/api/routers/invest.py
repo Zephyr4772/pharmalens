@@ -391,5 +391,7 @@ def dossier(slug: str):
     except Exception:  # noqa: BLE001 — before the first linker run
         pass
     out["timeline"] = cleanrows(sorted(tl.values(), key=lambda r: str(r["ts"]), reverse=True)[:60])
+    from ...linking.read import nsq_via_sku   # #7: failed batches of this group's SKUs, whoever made them
+    out["nsq_via_sku"] = cleanrows(nsq_via_sku([r[0] for r in cur.execute("SELECT id FROM companies WHERE parent_id = ?", [pid]).fetchall()]))
     out["approvals"] = cleanrows(db.rows(cur, ev.format("IN ('approval', 'trial', 'launch', 'usfda')"), [pid, pid, 40]))
     return out

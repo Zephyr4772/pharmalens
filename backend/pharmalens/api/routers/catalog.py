@@ -301,6 +301,8 @@ def product(pid: int):
     p["molecule_reference"] = molecule_reference(cur, mids, p.get("dosage_form")) if not info else None
     from ...linking.read import set_of_combo, us_eu_status
     p["us_eu"] = us_eu_status(set_of_combo(p.get("combo_id")))   # US / EU records with exactly this ingredient set
+    from ...linking.read import nsq_for_product
+    p["nsq_this_sku"] = nsq_for_product(pid)   # #7: batches linked to this exact SKU (brand, ingredients, strength, maker)
     # plant stage 1: the firm that registered this brand under Rule 84AB (brand word + exact ingredients)
     p["registered_makers"] = maybe(cur, """SELECT m.maker_key, any_value(m.name) AS name, coalesce(string_agg(DISTINCT b.brand_name, ', ') FILTER (WHERE bp.confidence >= 0.85), string_agg(DISTINCT b.brand_name, ', ')) AS brand_name,
                                                   string_agg(DISTINCT b.license_number, ', ') AS license_number, arg_max(bp.method, bp.confidence) AS method,
@@ -589,6 +591,8 @@ def company(slug: str):
     d["approvals_linked"] = approvals_for_company(c["id"])
     from .makers import made_by       # plant stage 1: who holds the brand registrations for this marketer's SKUs
     d["made_by"] = made_by(cur, c["id"])
+    from ...linking.read import nsq_via_sku
+    d["nsq_via_sku"] = nsq_via_sku([c["id"]])
     d["as_maker"] = maybe(cur, "SELECT maker_key, name, records FROM makers WHERE company_id = ? ORDER BY records DESC LIMIT 3", [c["id"]])
     return cleanrows([d])[0]
 

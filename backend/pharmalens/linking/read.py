@@ -175,3 +175,21 @@ def aliases_of(mid: int, canon: int) -> dict:
                            JOIN molecules m ON m.id = x.alias_id
                            WHERE x.canonical_id = ? AND NOT x.applied ORDER BY m.product_count DESC LIMIT 30""", [mid])
     return out
+
+
+def nsq_for_product(pid: int) -> list[dict]:
+    """Failed / spurious batches linked to this exact SKU (#7)."""
+    return _q("""SELECT n.alert_month, n.category, n.product_text, n.batch_no, n.manufacturer, n.reason, n.source_url, l.method, l.confidence, l.evidence
+                 FROM entity_links l JOIN reg_nsq n ON CAST(n.id AS VARCHAR) = l.src_key
+                 WHERE l.linker = 'nsq:product' AND l.dst_id = ? ORDER BY l.confidence DESC, n.alert_month DESC""", [str(pid)])
+
+
+def nsq_via_sku(company_ids: list[int], limit: int = 60) -> list[dict]:
+    """Batches attributed to a marketer through its SKU (#7), including ones made by contract manufacturers."""
+    if not company_ids:
+        return []
+    return _q(f"""SELECT n.alert_month, n.category, n.product_text, n.batch_no, n.manufacturer, n.reason, n.source_url, p.id AS product_id, p.name AS product,
+                         l.method, max(l.confidence) AS confidence, any_value(l.evidence) AS evidence
+                  FROM entity_links l JOIN reg_nsq n ON CAST(n.id AS VARCHAR) = l.src_key JOIN products p ON CAST(p.id AS VARCHAR) = l.dst_id
+                  WHERE l.linker = 'nsq:product' AND p.company_id IN ({','.join(str(int(c)) for c in company_ids)})
+                  GROUP BY ALL ORDER BY n.alert_month DESC LIMIT {int(limit)}""", [])

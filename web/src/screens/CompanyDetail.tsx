@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { get, inr, num } from "../lib/api";
 import { Dossier } from "../components/Dossier";
-import { AutoGroup, CompanyApprovals, LaunchSignals, MadeBy, Timeline } from "../components/Linked";
+import { AutoGroup, CompanyApprovals, LaunchSignals, MadeBy, SkuNsq, Timeline } from "../components/Linked";
 import { Debarments, Licences, Tenders } from "../components/Depth";
 import { ErrorBox, Kpi, Loading, Star } from "../components/ui";
 
@@ -38,6 +38,8 @@ export default function CompanyDetail() {
         <MadeBy rows={d.made_by} asMaker={d.as_maker} />
         <CompanyApprovals rows={d.approvals_linked} />
       </div>
+      <SkuNsq rows={d.nsq_via_sku} showProduct title="Failed batches of this marketer's SKUs"
+        sub="NSQ / spurious batches matched to this marketer's SKUs, including batches made by contract manufacturers" />
       <div className="grid cols-2">
         <Timeline rows={d.timeline} sub="events linked to this marketer (NSQ, debarments, launches, recalls) and its group" />
         <LaunchSignals rows={d.launches} showCompany={false} />
