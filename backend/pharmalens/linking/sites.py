@@ -30,7 +30,7 @@ STATES = ["andhra pradesh", "arunachal pradesh", "assam", "bihar", "chhattisgarh
           "karnataka", "kerala", "madhya pradesh", "maharashtra", "manipur", "meghalaya", "mizoram", "nagaland", "odisha", "orissa", "punjab",
           "rajasthan", "sikkim", "tamil nadu", "telangana", "tripura", "uttar pradesh", "uttarakhand", "uttaranchal", "west bengal", "delhi",
           "jammu and kashmir", "jammu", "puducherry", "pondicherry", "chandigarh", "daman", "dadra", "ladakh", "h p", "hp", "u p", "m p"]
-GENERIC = set("""plot no road industrial estate area village district dist mandal taluka tal tehsil near opp opposite sector phase gidc midc
+GENERIC = set("""plot no road industrial estate area village district dist distt mandal taluka tal tehsil near opp opposite sector phase gidc midc
 ida sidcul ltd limited pvt private unit block survey sy khasra floor building complex highway nagar park zone sez post po via
 behind main cross lane street st the and of at in india state town city new old ground first second third m s ms co""".split()) | {s for st in STATES for s in st.split()}
 PIN = re.compile(r"(?<!\d)([1-8]\d{2})\s?-?\s?(\d{3})(?!\d)")
