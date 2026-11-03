@@ -67,6 +67,27 @@ def one(cur, sql: str, params=None) -> dict | None:
     return r[0] if r else None
 
 
+def memory_top(n: int = 4) -> str:
+    """DuckDB's largest memory users right now, for out-of-memory reports."""
+    try:
+        return ", ".join(f"{t} {mb:.0f}MB" for t, mb in cursor().execute(
+            "SELECT tag, memory_usage_bytes / 1e6 FROM duckdb_memory() ORDER BY 2 DESC LIMIT ?", [n]).fetchall())
+    except Exception:  # noqa: BLE001
+        return "?"
+
+
+@contextmanager
+def memory_limit(limit: str):
+    """Run with a different DuckDB memory limit (one connection, so it applies process-wide), then restore it."""
+    from .config import DUCKDB_MEMORY
+    cur = cursor()
+    cur.execute(f"SET memory_limit = '{limit}'")
+    try:
+        yield
+    finally:
+        cur.execute(f"SET memory_limit = '{DUCKDB_MEMORY}'")
+
+
 def close():
     global _conn
     with _conn_lock:
