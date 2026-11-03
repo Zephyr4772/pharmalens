@@ -254,6 +254,8 @@ def run() -> dict:
         if not dist or foreign:
             continue                       # abroad without a postal code: no reliable site
         key = f"st:{mk[3:]}|{st or 'india'}:{dist}"
+        if table in ("fda_compliance_actions", "fda_import_refusals") and key not in info:
+            continue                       # a shipper's or addressee's office is not a plant: these only join sites other records define
         site_of[(table, sk, addr)] = key
         method_of[(table, sk, addr)] = ("district_site", 0.85)
         if f:
