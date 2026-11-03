@@ -164,6 +164,11 @@ def main(path: str, out: str | None = None) -> dict:
         cov("sites with a US FDA inspection", "sites s", "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'fda_inspections' AND hl.dst_id = s.site_key)")
         cov("curated-group sites with a US FDA inspection", "sites s",
             "EXISTS (SELECT 1 FROM hl WHERE hl.src_table = 'fda_inspections' AND hl.dst_id = s.site_key)", "parent_id IS NOT NULL")
+    if "fda_compliance_actions" in tables:
+        cov("US FDA warning letter / injunction (India) -> site", "fda_compliance_actions a", linkcond("fda_compliance_actions", "a.case_id", "site"),
+            "country ILIKE '%india%'")
+        cov("US FDA import refusal (India drugs) -> site", "fda_import_refusals r",
+            linkcond("fda_import_refusals", "r.shipment_id || '|' || r.product_code", "site"))
     # ---- NSQ batch -> SKU (#7)
     cov("NSQ batch -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"))
     cov("NSQ batch since 2025 -> SKU (high)", "reg_nsq n", linkcond("reg_nsq", "CAST(n.id AS VARCHAR)", "product"), "alert_month >= '2025-01'")

@@ -269,7 +269,9 @@ export function Plants({ rows, title = "Plants", sub, showMaker = false }: { row
           <td className={`num ${s.debarments ? "neg" : ""}`}>{s.debarments || ""}</td><td className="faint">{s.last_nsq ?? ""}</td>
           <td>{s.last_inspection ? <><span className={`badge ${/official/i.test(s.last_inspection_class) ? "b-down" : /voluntary/i.test(s.last_inspection_class) ? "b-warn" : "b-up"}`}
             title={`${s.inspections} inspection(s), ${s.oai} OAI`}>{/official/i.test(s.last_inspection_class) ? "OAI" : /voluntary/i.test(s.last_inspection_class) ? "VAI" : /no action/i.test(s.last_inspection_class) ? "NAI" : s.last_inspection_class}</span>
-            <span className="faint"> {s.last_inspection}</span></> : ""}</td></tr>)}</tbody></table>
+            <span className="faint"> {s.last_inspection}</span></> : ""}
+            {s.warning_letters > 0 && <span className="badge b-down" style={{ marginLeft: 4 }} title={`US FDA warning letter / injunction, last ${s.last_warning}`}>WL {s.warning_letters}</span>}
+            {s.refusals > 0 && <span className="badge b-warn" style={{ marginLeft: 4 }} title="refused drug shipments from this plant (US FDA import refusals)">IR {s.refusals}</span>}</td></tr>)}</tbody></table>
     </Panel>
   );
 }

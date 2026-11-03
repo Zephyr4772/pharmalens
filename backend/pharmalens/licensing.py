@@ -124,6 +124,8 @@ TABLES = {
     "makers":               (["cdsco_web", "openfda", "cdci", "state_gov", "kaggle_nc", "drugden"], "firm names from every source; links carry their own licence"),
     "fda_inspections":      (["fda_web"], "FDA Data Dashboard inspections (classification)"),
     "fda_citations":        (["fda_web"], "FDA Data Dashboard Form 483 citations"),
+    "fda_compliance_actions": (["fda_web"], "FDA Data Dashboard compliance actions (warning letters, injunctions)"),
+    "fda_import_refusals":  (["fda_web"], "FDA Data Dashboard import refusals (drug shipments from India)"),
     "sites":                (["cdsco_web", "openfda", "state_gov", "drugden"], "addresses from approvals, NSQ lists, US FDA, debarments"),
     "maker_makes_for":      (["cdsco_web", "kaggle_nc", "drugden"], "84AB registrations matched to catalog SKUs"),
 }

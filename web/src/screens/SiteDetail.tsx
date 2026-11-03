@@ -59,6 +59,15 @@ export default function SiteDetail() {
             <td>{day(c.end_date)}</td><td className="amb">{c.act_cfr}</td><td title={c.long_desc}>{c.short_desc}</td></tr>)}</tbody></table>}
         </Panel>
       )}
+      {(s.compliance?.length > 0 || s.refusals?.length > 0) && (
+        <Panel title="US FDA warning letters and import refusals" sub="FDA Data Dashboard: compliance actions against this plant's FEI or firm, and refused drug shipments from it; charges are FDA refusal codes">
+          {keep(s.compliance ?? []).length > 0 && <table className="tt"><tbody>{keep(s.compliance).map((a: Row) => <tr key={a.case_id}><td>{day(a.action_date)}</td>
+            <td><span className="badge b-down">{a.action_type}</span></td><td className="mut">{a.center}</td><td className="faint">{a.fei}</td><td><Inferred r={a} /></td></tr>)}</tbody></table>}
+          {keep(s.refusals ?? []).length > 0 && <table className="tt" style={{ marginTop: 8 }}><thead><tr><th>Refused</th><th>Product</th><th>Charges</th><th>FDA sample</th><th /></tr></thead>
+            <tbody>{keep(s.refusals).map((r: Row, j: number) => <tr key={j}><td>{day(r.refusal_date)}</td><td title={r.product_code}>{r.product}</td>
+              <td className="amb">{r.charges}</td><td className="mut">{r.fda_sample}</td><td><Inferred r={r} /></td></tr>)}</tbody></table>}
+        </Panel>
+      )}
       <Plants rows={s.other_sites} title="Other sites of this firm" />
     </div>
   );

@@ -52,7 +52,18 @@ def _last_inspections(cur, keys: list[str]) -> dict[str, dict]:
                                GROUP BY 1""", keys).fetchall()
     except Exception:  # noqa: BLE001 — inspections feed not loaded yet
         return {}
-    return {k: {"last_inspection_class": c, "last_inspection": d, "inspections": n, "oai": o} for k, c, d, n, o in rows}
+    out = {k: {"last_inspection_class": c, "last_inspection": d, "inspections": n, "oai": o} for k, c, d, n, o in rows}
+    try:
+        for k, wl, last, ir in cur.execute(f"""SELECT l.dst_id, count(a.case_id), max(a.action_date), count(*) FILTER (WHERE l.src_table = 'fda_import_refusals')
+                                               FROM entity_links l LEFT JOIN fda_compliance_actions a ON l.src_table = 'fda_compliance_actions'
+                                                    AND a.case_id = l.src_key
+                                               WHERE l.linker = 'site:records' AND l.confidence >= {HIGH}
+                                                 AND l.src_table IN ('fda_compliance_actions', 'fda_import_refusals')
+                                                 AND l.dst_id IN ({','.join('?' * len(keys))}) GROUP BY 1""", keys).fetchall():
+            out.setdefault(k, {}).update({"warning_letters": wl, "last_warning": last, "refusals": ir})
+    except Exception:  # noqa: BLE001 — compliance feed not loaded yet
+        pass
+    return out
 
 
 @router.get("/{key:path}")
@@ -80,5 +91,12 @@ def site(key: str):
                                          AND src_table = 'fda_inspections' AND dst_id = ?) ORDER BY c.end_date DESC LIMIT 80""", [key])
     except Exception:  # noqa: BLE001 — inspections feed not loaded yet
         s["inspections"], s["citations"] = [], []
+    try:
+        s["compliance"] = _recs(cur, "fda_compliance_actions", "t.case_id, t.fei, t.action_date, t.action_type, t.center, t.firm", "t.case_id", key,
+                                "t.action_date DESC NULLS LAST")
+        s["refusals"] = _recs(cur, "fda_import_refusals", "t.refusal_date, t.fei, t.product, t.product_code, t.charges, t.fda_sample, t.shipment_id",
+                              "t.shipment_id || '|' || t.product_code", key, "t.refusal_date DESC NULLS LAST")
+    except Exception:  # noqa: BLE001 — compliance feed not loaded yet
+        s["compliance"], s["refusals"] = [], []
     s["other_sites"] = summary(cur, "s.maker_key = ? AND s.site_key <> ?", [s["maker_key"], key], 30)
     return cleanrows([s])[0]

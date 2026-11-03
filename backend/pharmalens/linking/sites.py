@@ -6,7 +6,9 @@ Units of one firm that share a PIN are one site here; their unit labels are kept
   reg_nsq.manufacturer       the site whose batch failed (firm name + address)
   firm_debarments.address    the debarred firm's address
   usfda_actions              import-alert address (subject) / recall city (event payload): these carry no PIN
-  fda_inspections            US FDA inspection (FEI, firm, city, state, ZIP: an Indian ZIP is the PIN), when loaded
+  fda_inspections            US FDA inspection (FEI, firm, street, city; abroad state + ZIP), when loaded
+  fda_compliance_actions     US FDA warning letter / injunction (same fields), makers or inspected FEIs only
+  fda_import_refusals        US FDA refused drug shipment from India (same fields), makers or inspected FEIs only
 Records with a PIN link to their site at 0.9 (the site is defined by the record's own address). Records without one
 link to the maker's PIN site whose address shares their locality words when exactly one such site exists (0.85,
 locality_match); otherwise to a district-level site of that maker (0.85, district_site: "this firm's plant in district
@@ -125,28 +127,42 @@ def run() -> dict:
         recs.append(("firm_debarments", key, maker_link.get(("firm_debarments", key)) or mk_from(firm), addr, "debarred_site", "India"))
     fei_of: dict[tuple, str] = {}
     fda_city: dict[tuple, tuple] = {}
-    try:   # US FDA inspections (fda_inspections feed): FEI + firm + city / state / ZIP; an Indian ZIP is the PIN
-        for iid, fei, firm, street, cty, st, z, ctry, area in cur.execute("""SELECT inspection_id, fei, firm, address, city, state, zip, country,
-                                                                            project_area FROM fda_inspections""").fetchall():
+    FDA = {   # FDA Data Dashboard tables: FEI + firm + street / city / state / ZIP (abroad); an Indian address has a city only
+        "fda_inspections": ("us_fda_inspection", """SELECT inspection_id, fei, firm, address, city, state, zip, country, project_area
+                                                      FROM fda_inspections"""),
+        "fda_compliance_actions": ("us_fda_compliance", """SELECT case_id, fei, firm, address, city, state, zip, country, NULL
+                                                             FROM fda_compliance_actions"""),
+        "fda_import_refusals": ("us_fda_refusal", """SELECT shipment_id || '|' || product_code, fei, firm, address, city, NULL, NULL, country, NULL
+                                                       FROM fda_import_refusals"""),
+    }
+    inspected: set[str] = set()
+    for table, (role, sql) in FDA.items():
+        try:
+            rows_ = cur.execute(sql).fetchall()
+        except Exception:  # noqa: BLE001 — feed not loaded yet
+            continue
+        for iid, fei, firm, street, cty, st, z, ctry, area in rows_:
             india = bool(re.search(r"india", ctry or "", re.I))
             mk = mk_from(firm)
             if not mk or PERSON.search(firm or "") or (re.search(r"bioresearch", area or "", re.I) and mk not in makers):
                 continue           # clinical investigators, hospitals and CROs (BIMO) are not plants, unless the firm is a known maker
+            if table == "fda_inspections":
+                inspected.add(fei)
+            elif mk not in makers and fei not in inspected:
+                continue           # warning letters and refused shipments also reach traders and web shops: only makers or inspected plants
             if india:              # FDA gives Indian firms no PIN; the street's numbers are survey / plot numbers, never a PIN
                 street = re.sub(r"\d", " ", street or "")
             addr = (f"{street}, {cty or ''}, {st or ''} {z or ''}, India" if india
                     else f"{street or ''}, {cty or ''}, {st or ''}, {ctry or ''}-{z or ''}")
-            recs.append(("fda_inspections", str(iid), mk, addr, "us_fda_inspection", "India" if india else (ctry or "")))
-            fei_of[("fda_inspections", str(iid))] = fei
+            recs.append((table, str(iid), mk, addr, role, "India" if india else (ctry or "")))
+            fei_of[(table, str(iid))] = fei
             if india:
-                fda_city[("fda_inspections", str(iid))] = (street, cty)
-    except Exception:  # noqa: BLE001 — feed not loaded yet
-        pass
+                fda_city[(table, str(iid))] = (street, cty)
     # FDA's Indian addresses carry a city but no state or PIN: take the state our other Indian addresses give that place, when they agree
     place_state: dict[str, Counter] = defaultdict(Counter)
     for table, sk, mk, addr, role, country in recs:
         st, d = state_of(addr), district(addr)
-        if table != "fda_inspections" and st and d:
+        if table not in FDA and st and d:
             place_state[d][st] += 1
     for n, (table, sk, mk, addr, role, country) in enumerate(recs):
         if (table, sk) not in fda_city or state_of(addr) or pin_of(addr):
@@ -169,7 +185,7 @@ def run() -> dict:
     site_of: dict[tuple, str] = {}
     info: dict[str, dict] = {}
     pending = []
-    recs.sort(key=lambda r: r[0] == "fda_inspections")   # stable: inspections after the sources that define foreign sites
+    recs.sort(key=lambda r: list(FDA).index(r[0]) + 1 if r[0] in FDA else 0)   # stable: FDA tables after the sources that define sites, inspections first
     for table, sk, mk, addr, role, country in recs:
         if not mk:
             continue
@@ -179,10 +195,10 @@ def run() -> dict:
         key = kind = None
         if foreign:
             m = FOREIGN.search(addr)
-            if m and table in ("reg_approvals", "fda_inspections"):
+            if m and (table == "reg_approvals" or table in FDA):
                 ctry = norm(m.group(1)).split()[-1] if norm(m.group(1)) else ""
                 key, kind, country = f"st:{mk[3:]}|{ctry}:{norm(m.group(2)).replace(' ', '')}", "foreign_postal", m.group(1).strip()
-                if table == "fda_inspections" and key not in info:
+                if table in FDA and key not in info:
                     key = None     # abroad, inspections only join a site our India-facing sources already list (US parents share names)
         else:
             p = pin_of(addr)
@@ -209,7 +225,18 @@ def run() -> dict:
         if s["kind"] == "pin":
             by_maker[s["maker_key"]].append(k)
     method_of: dict[tuple, tuple[str, float]] = {}
+    fei_sites: dict[str, set] = defaultdict(set)      # FEI -> sites placed so far (FDA's establishment id: one plant)
+    for (table, sk, addr), key in site_of.items():
+        if fei_of.get((table, sk)):
+            fei_sites[fei_of[(table, sk)]].add(key)
     for table, sk, mk, addr, role, country in pending:
+        f = fei_of.get((table, sk))
+        if f and len(fei_sites.get(f, ())) == 1:
+            key = next(iter(fei_sites[f]))
+            site_of[(table, sk, addr)] = key
+            method_of[(table, sk, addr)] = ("same_fei", 0.95)
+            info[key]["roles"][role] += 1
+            continue
         loc = locality(addr)
         scores = [(len(loc & set(info[k]["loc"])), k) for k in by_maker.get(mk, [])]
         scores = [x for x in scores if x[0] > 0]
@@ -219,6 +246,8 @@ def run() -> dict:
             site_of[(table, sk, addr)] = top[0]
             method_of[(table, sk, addr)] = ("locality_match", 0.85)
             info[top[0]]["roles"][role] += 1
+            if f:
+                fei_sites[f].add(top[0])
             continue
         dist, st = district(addr), state_of(addr)
         foreign = (country and not re.search(r"india", country, re.I)) or (table == "reg_approvals" and not re.search(r"india", addr, re.I))
@@ -227,6 +256,8 @@ def run() -> dict:
         key = f"st:{mk[3:]}|{st or 'india'}:{dist}"
         site_of[(table, sk, addr)] = key
         method_of[(table, sk, addr)] = ("district_site", 0.85)
+        if f:
+            fei_sites[f].add(key)
         s = info.setdefault(key, {"maker_key": mk, "kind": "district", "country": "India", "pin": None, "addr": Counter(), "loc": Counter(),
                                   "units": set(), "roles": Counter(), "state": Counter(), "fei": set()})
         s["addr"][addr.strip()[:200]] += 1
