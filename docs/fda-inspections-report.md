@@ -81,9 +81,16 @@ events were raised for history.
   coarse.
 - **FDA's own inconsistencies:** some records give a street in one city and the city field in another (USV
   "Peenya" street with "Govandi" city). The street wins.
-- **Memory:** the entity linker ran out of DuckDB memory (600 MB cap) twice after a feed ran in the same process. A
-  container restart fixed it, and the deploys since have each started fresh. Watch the 05:10 linker on Wednesday,
-  after Tuesday's FDA feeds.
+- **Memory (fixed 2026-11-03):** the entity linker ran out of DuckDB memory (600 MB cap) twice after a feed ran in
+  the same process. Profiled under the cap, each item passes alone. Peak memory was 570 MB for makers, 600 MB for
+  nsq_products and 494 MB for prices. Most of it is spillable cache, but makers also needs about 70 MB of in-memory
+  index. The linker now:
+  - runs each item on its own;
+  - rolls back an item that runs out of memory, checkpoints, and retries it once at `PHARMALENS_DUCKDB_BURST`
+    (850 MB) before restoring the cap;
+  - lets the rest run if an item still fails, but records the run as an error.
+
+  Tested at a forced 250 MB cap (makers retried and completed), then run live: ok, 221 s.
 
 ## Screener flags (same day)
 The screener's USFDA badge and the bot's `/sanity` check now include the plants' record, using the scorecard's
