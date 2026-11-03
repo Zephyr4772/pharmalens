@@ -124,6 +124,7 @@ def run() -> dict:
     for key, firm, addr in cur.execute("SELECT dedupe_key, firm, address FROM firm_debarments WHERE address IS NOT NULL").fetchall():
         recs.append(("firm_debarments", key, maker_link.get(("firm_debarments", key)) or mk_from(firm), addr, "debarred_site", "India"))
     fei_of: dict[tuple, str] = {}
+    fda_city: dict[tuple, tuple] = {}
     try:   # US FDA inspections (fda_inspections feed): FEI + firm + city / state / ZIP; an Indian ZIP is the PIN
         for iid, fei, firm, street, cty, st, z, ctry in cur.execute("""SELECT inspection_id, fei, firm, address, city, state, zip, country
                                                                       FROM fda_inspections""").fetchall():
@@ -135,8 +136,26 @@ def run() -> dict:
                     else f"{street or ''}, {cty or ''}, {st or ''}, {ctry or ''}-{z or ''}")
             recs.append(("fda_inspections", str(iid), mk, addr, "us_fda_inspection", "India" if india else (ctry or "")))
             fei_of[("fda_inspections", str(iid))] = fei
+            if india:
+                fda_city[("fda_inspections", str(iid))] = (street, cty)
     except Exception:  # noqa: BLE001 — feed not loaded yet
         pass
+    # FDA's Indian addresses carry a city but no state or PIN: take the state our other Indian addresses give that place, when they agree
+    place_state: dict[str, Counter] = defaultdict(Counter)
+    for table, sk, mk, addr, role, country in recs:
+        st, d = state_of(addr), district(addr)
+        if table != "fda_inspections" and st and d:
+            place_state[d][st] += 1
+    for n, (table, sk, mk, addr, role, country) in enumerate(recs):
+        if (table, sk) not in fda_city or state_of(addr) or pin_of(addr):
+            continue
+        street, cty = fda_city[(table, sk)]
+        for part in reversed([p.strip() for p in re.split(r"[,(]", cty or "") if p.strip()]):     # "Gajraula, Amroha" -> amroha, then gajraula
+            words = [w for w in norm(part).split() if w not in GENERIC and len(w) >= 4]
+            c = place_state.get(words[-1]) if words else None
+            if c and c.most_common(1)[0][1] >= 0.9 * sum(c.values()):
+                recs[n] = (table, sk, mk, f"{street or ''}, {part}, {c.most_common(1)[0][0].title()}, India", role, country)
+                break
     city = dict(cur.execute("""SELECT split_part(dedupe_key, '|', 2), json_extract_string(payload, '$.city') FROM events
                                WHERE dedupe_key LIKE 'fda|recall-%'""").fetchall())
     for aid, kind, firm, country, subject in cur.execute("SELECT id, kind, firm, country, subject FROM usfda_actions").fetchall():
@@ -223,7 +242,9 @@ def run() -> dict:
         site_of[(table, sk, addr)] = key
         method_of[(table, sk, addr)] = ("same_fei", 0.95)
         info[key]["roles"][role] += 1
-        info[key]["fei"].add(f)
+    for (table, sk, addr), key in site_of.items():
+        if fei_of.get((table, sk)):
+            info[key]["fei"].add(fei_of[(table, sk)])
     rows = []
     for k, s in info.items():
         n, cid, pid, ag, dist_ = makers.get(s["maker_key"], (None, None, None, None, True))
