@@ -124,9 +124,11 @@ def run() -> dict:
         recs.append(("firm_debarments", key, maker_link.get(("firm_debarments", key)) or mk_from(firm), addr, "debarred_site", "India"))
     fei_of: dict[tuple, str] = {}
     try:   # US FDA inspections (fda_inspections feed): FEI + firm + city / state / ZIP; an Indian ZIP is the PIN
-        for iid, fei, firm, cty, st, z, ctry in cur.execute("""SELECT inspection_id, fei, firm, city, state, zip, country FROM fda_inspections""").fetchall():
+        for iid, fei, firm, street, cty, st, z, ctry in cur.execute("""SELECT inspection_id, fei, firm, address, city, state, zip, country
+                                                                      FROM fda_inspections""").fetchall():
             india = bool(re.search(r"india", ctry or "", re.I))
-            addr = f"{cty or ''}, {st or ''} {z or ''}, India" if india else f"{cty or ''}, {st or ''}, {ctry or ''}-{z or ''}"
+            addr = (f"{street or ''}, {cty or ''}, {st or ''} {z or ''}, India" if india
+                    else f"{street or ''}, {cty or ''}, {st or ''}, {ctry or ''}-{z or ''}")
             recs.append(("fda_inspections", str(iid), mk_from(firm), addr, "us_fda_inspection", "India" if india else (ctry or "")))
             fei_of[("fda_inspections", str(iid))] = fei
     except Exception:  # noqa: BLE001 — feed not loaded yet

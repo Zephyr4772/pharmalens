@@ -33,16 +33,17 @@ ALIASES = {
     "posted_citations": ["postedcitations"], "fiscal_year": ["fiscalyear"], "district": ["district"],
     "act_cfr": ["actcfrnumber", "cfrnumber", "actcfr"], "short_desc": ["shortdescription"], "long_desc": ["longdescription"],
 }
-INSP_COLS = ["inspection_id", "fei", "firm", "city", "state", "zip", "country", "end_date", "classification", "product_type", "project_area",
+INSP_COLS = ["inspection_id", "fei", "firm", "address", "city", "state", "zip", "country", "end_date", "classification", "product_type", "project_area",
              "posted_citations", "fiscal_year", "district"]
 CIT_COLS = ["inspection_id", "fei", "firm", "end_date", "project_area", "act_cfr", "short_desc", "long_desc"]
 
 DDL = """
 CREATE TABLE IF NOT EXISTS fda_inspections (
-    inspection_id VARCHAR PRIMARY KEY, fei VARCHAR, firm VARCHAR, city VARCHAR, state VARCHAR, zip VARCHAR, country VARCHAR,
+    inspection_id VARCHAR PRIMARY KEY, fei VARCHAR, firm VARCHAR, address VARCHAR, city VARCHAR, state VARCHAR, zip VARCHAR, country VARCHAR,
     end_date DATE, classification VARCHAR, product_type VARCHAR, project_area VARCHAR, posted_citations VARCHAR,
     fiscal_year VARCHAR, district VARCHAR, fetched_at TIMESTAMP
 );
+ALTER TABLE fda_inspections ADD COLUMN IF NOT EXISTS address VARCHAR;
 CREATE TABLE IF NOT EXISTS fda_citations (
     inspection_id VARCHAR, fei VARCHAR, firm VARCHAR, end_date DATE, project_area VARCHAR, act_cfr VARCHAR,
     short_desc VARCHAR, long_desc VARCHAR, fetched_at TIMESTAMP
@@ -74,22 +75,30 @@ class FdaInspections(Connector):
     schedule = {"trigger": "cron", "day_of_week": "tue", "hour": 6, "minute": 40}
     description = "Drug-site inspections (classification NAI / VAI / OAI) and Form 483 citations, by FEI and address."
 
-    def _api(self, endpoint: str) -> pd.DataFrame:
-        user, key = os.getenv("FDA_DD_USER"), os.getenv("FDA_DD_KEY")
-        rows, start = [], 1
-        with self.http() as s:
-            while True:
-                r = s.post(API.format(endpoint), headers={"Content-Type": "application/json", "Authorization-User": user, "Authorization-Key": key},
-                           json={"start": start, "rows": 5000, "sort": "InspectionEndDate", "sortorder": "desc"}, timeout=180)
-                if r.status_code == 412:
+    def _api(self, endpoint: str, filters: dict, sort: str) -> pd.DataFrame:
+        """All rows of one Data Dashboard endpoint for these filters, 5,000 per request (the API's maximum)."""
+        headers = {"Content-Type": "application/json", "Authorization-User": os.getenv("FDA_DD_USER"),
+                   "Authorization-Key": os.getenv("FDA_DD_KEY")}
+        rows, start, total = [], 1, None
+        s = self.http
+        while True:
+            r = s.post(API.format(endpoint), headers=headers, timeout=180,
+                       json={"start": start, "rows": 5000, "returntotalcount": True, "sort": sort, "sortorder": "ASC",
+                             "filters": filters, "columns": []})
+            r.raise_for_status()
+            body = r.json()
+            body = body[0] if isinstance(body, list) else body
+            if body.get("message") != "Success.":
+                if body.get("statuscode") == 412:      # no results
                     break
-                r.raise_for_status()
-                body = r.json()
-                batch = body.get("result") or []
-                rows += batch
-                if len(batch) < 5000:
-                    break
-                start += len(batch)
+                raise RuntimeError(f"{endpoint}: {body.get('statuscode')} {body.get('message')}")
+            total = total or body.get("totalrecordcount")
+            batch = body.get("result") or []
+            rows += batch
+            if len(batch) < 5000 or (total and len(rows) >= total):
+                break
+            start += len(batch)
+        self.stats.notes.append(f"{endpoint}: {len(rows):,} of {total or '?'}")
         self.archive(json.dumps(rows[:50]).encode(), "json", key=f"{endpoint}-sample-{date.today():%Y%m%d}")
         return pd.DataFrame(rows)
 
@@ -104,7 +113,8 @@ class FdaInspections(Connector):
         with db.writer() as w:
             w.execute(DDL)
         if os.getenv("FDA_DD_USER") and os.getenv("FDA_DD_KEY"):
-            insp, cit, how = self._api("inspections_classifications"), self._api("inspections_citations"), "API"
+            insp = self._api("inspections_classifications", {"ProductType": ["Drugs"]}, "InspectionID")
+            cit, how = self._api("inspections_citations", {"ProgramArea": ["Drugs"]}, "CitationID"), "API"
         else:
             insp, cit, how = self._file("Inspections"), self._file("Citations"), "files"
         if insp is None or not len(insp):
@@ -123,12 +133,13 @@ class FdaInspections(Connector):
             i["fetched_at"], c["fetched_at"] = now, now
             w.execute("DELETE FROM fda_inspections").fetchall()
             w.register("_i", i)
-            w.execute(f"INSERT INTO fda_inspections SELECT {', '.join(INSP_COLS)}, fetched_at FROM _i").fetchall()
+            # columns named: on an existing table the later-added address column sits at the end
+            w.execute(f"INSERT INTO fda_inspections ({', '.join(INSP_COLS)}, fetched_at) SELECT {', '.join(INSP_COLS)}, fetched_at FROM _i").fetchall()
             w.unregister("_i")
             w.execute("DELETE FROM fda_citations").fetchall()
             if len(c):
                 w.register("_c", c)
-                w.execute(f"INSERT INTO fda_citations SELECT {', '.join(CIT_COLS)}, fetched_at FROM _c").fetchall()
+                w.execute(f"INSERT INTO fda_citations ({', '.join(CIT_COLS)}, fetched_at) SELECT {', '.join(CIT_COLS)}, fetched_at FROM _c").fetchall()
                 w.unregister("_c")
             new = i[~i["inspection_id"].isin(old)]
             self.stats.rows_new = len(new)
