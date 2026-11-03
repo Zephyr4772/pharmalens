@@ -119,14 +119,18 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 - Terminal: `/` is now Today (key 1), `/companies` the screener (2); the old home moved to `/market` (3). Rail keys
   were renumbered (NEWS n, SHELF s, FEED f).
 
-## US FDA inspections (2026-11-03): waiting for data
-- Feed `fda_inspections` (weekly, Tue 06:40) loads drug inspections (NAI / VAI / OAI) and Form 483 citations from the
-  FDA Data Dashboard into `fda_inspections` / `fda_citations`, and raises a `usfda` event for each new OAI inspection
-  of an Indian firm. The sites linker matches each inspection to a site by firm + ZIP (an Indian ZIP is the PIN) and
-  records FEI numbers on sites; site pages, maker sites and group plants show the latest classification.
-- It needs one of: `FDA_DD_USER` + `FDA_DD_KEY` in the server .env (key requested via FDA's OII Unified Logon), or the
-  dashboard's "Entire Inspections Dataset" and "Entire Citations Dataset" .xlsx files in `data/raw/fda_dashboard/` on
-  the server. Scripting the dashboard's own Qlik export was refused as access circumvention: do not retry that.
+## US FDA inspections (2026-11-03): live
+- Feed `fda_inspections` (weekly, Tue 06:40) pulls drug inspections and Form 483 citations from the FDA Data Dashboard
+  API, using `FDA_DD_USER` / `FDA_DD_KEY` in the server .env (set with `deploy/set_keys.sh`). The first run loaded
+  39,661 inspections and 38,178 citations. New OAI inspections of Indian firms raise `usfda` events.
+- The sites linker places inspections on plants:
+  - Indian inspections by locality or district; FDA gives no PIN, and the state is inferred from the city.
+  - Inspections abroad only on sites that Indian approvals list.
+  - Bioresearch Monitoring inspections only for known makers.
+  - Inspections sharing an FEI go to the same site.
+- Coverage: 72.5% of Indian inspections are linked (about 93% excluding Bioresearch Monitoring), and 699 sites have
+  one. See `docs/fda-inspections-report.md` and `docs/link-samples/fda-inspections.md`.
+- Scripting the dashboard's own Qlik export was refused as access circumvention: do not retry that.
 
 ## Specs, the Telegram bot (2026-10-29)
 - `bot/telegram.py` long-polls (messages + button taps), routes `/commands` to `bot/commands.py`, everything else to
