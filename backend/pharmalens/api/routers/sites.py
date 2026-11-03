@@ -66,6 +66,23 @@ def _last_inspections(cur, keys: list[str]) -> dict[str, dict]:
     return out
 
 
+def group_fda(cur, parent_id: int) -> dict:
+    """US FDA plant record for a group's sites (high-confidence links): OAI inspections and warning letters in 2 years,
+    refused shipments in 12 months. Empty when the Data Dashboard feeds are not loaded."""
+    def one(select: str, table: str, key: str, when: str):
+        return cur.execute(f"""SELECT {select} FROM entity_links l JOIN sites s ON s.site_key = l.dst_id JOIN {table} t ON {key} = l.src_key
+                               WHERE l.linker = 'site:records' AND l.src_table = '{table}' AND l.confidence >= {HIGH}
+                                 AND s.parent_id = ? AND {when}""", [parent_id]).fetchone()
+    try:
+        oai, n = one("count(*) FILTER (WHERE t.classification ILIKE '%official action%'), count(*)", "fda_inspections", "t.inspection_id",
+                     "t.end_date >= current_date - INTERVAL 2 YEAR")
+        wl, last = one("count(*), max(t.action_date)", "fda_compliance_actions", "t.case_id", "t.action_date >= current_date - INTERVAL 2 YEAR")
+        ir = one("count(*)", "fda_import_refusals", "t.shipment_id || '|' || t.product_code", "t.refusal_date >= current_date - INTERVAL 1 YEAR")[0]
+    except Exception:  # noqa: BLE001 — Data Dashboard feeds not loaded yet
+        return {}
+    return {"oai_2y": oai, "inspections_2y": n, "wl_2y": wl, "last_wl": last, "refusals_1y": ir}
+
+
 @router.get("/{key:path}")
 def site(key: str):
     cur = db.cursor()

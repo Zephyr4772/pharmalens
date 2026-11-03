@@ -392,8 +392,17 @@ def dossier(slug: str):
         pass
     out["timeline"] = cleanrows(sorted(tl.values(), key=lambda r: str(r["ts"]), reverse=True)[:60])
     from ...linking.read import nsq_via_sku   # #7: failed batches of this group's SKUs, whoever made them
-    from .sites import summary             # plant stage 2: the group's plants (sites of makers in the group)
+    from .sites import group_fda, summary  # plant stage 2: the group's plants (sites of makers in the group)
     out["plants"] = summary(cur, "s.parent_id = ?", [pid], 80)
+    pf = group_fda(cur, pid)
+    row = next((x for x in out.get("scorecard") or [] if x["area"] == "US FDA"), None)
+    if pf and row:   # the plants' own record (Data Dashboard): OAI / warning letter -> red, many refused shipments -> amber
+        if pf["oai_2y"] or pf["wl_2y"]:
+            row["level"] = "red"
+        elif pf["refusals_1y"] >= 10 and row["level"] == "green":
+            row["level"] = "amber"
+        row["text"] += (f"; plants: {pf['inspections_2y']} inspections in 2 years ({pf['oai_2y']} OAI), {pf['wl_2y']} warning letters"
+                        + (f" (last {pf['last_wl']})" if pf["last_wl"] else "") + f", {pf['refusals_1y']} refused shipments in 12 months")
     out["nsq_via_sku"] = cleanrows(nsq_via_sku([r[0] for r in cur.execute("SELECT id FROM companies WHERE parent_id = ?", [pid]).fetchall()]))
     out["approvals"] = cleanrows(db.rows(cur, ev.format("IN ('approval', 'trial', 'launch', 'usfda')"), [pid, pid, 40]))
     return out
