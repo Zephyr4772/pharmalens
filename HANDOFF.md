@@ -131,6 +131,13 @@ sources match it; only then retire it.** It was never the backbone: catalog pric
 - Coverage: 72.5% of Indian inspections are linked (about 93% excluding Bioresearch Monitoring), and 699 sites have
   one. See `docs/fda-inspections-report.md` and `docs/link-samples/fda-inspections.md`.
 - Scripting the dashboard's own Qlik export was refused as access circumvention: do not retry that.
+- Feed `fda_compliance` (Tue 06:55, same key) loads drug warning letters and injunctions (all countries) and refused drug
+  shipments from India into `fda_compliance_actions` / `fda_import_refusals`.
+  - They're placed on plants by FEI first, and only onto sites other records define.
+  - Coverage: 79.5% of Indian warning letters reach a plant, and 27% of refusals.
+  - Site pages and plant lists show them, and the dossier's US FDA scorecard row counts them.
+- The sites linker now also checks that a PIN fits a state the address names. See `docs/fda-inspections-report.md`
+  (Known issues) and `docs/link-samples/fda-compliance.md`.
 
 ## Specs, the Telegram bot (2026-10-29)
 - `bot/telegram.py` long-polls (messages + button taps), routes `/commands` to `bot/commands.py`, everything else to
