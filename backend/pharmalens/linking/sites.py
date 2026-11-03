@@ -126,13 +126,15 @@ def run() -> dict:
     fei_of: dict[tuple, str] = {}
     fda_city: dict[tuple, tuple] = {}
     try:   # US FDA inspections (fda_inspections feed): FEI + firm + city / state / ZIP; an Indian ZIP is the PIN
-        for iid, fei, firm, street, cty, st, z, ctry in cur.execute("""SELECT inspection_id, fei, firm, address, city, state, zip, country
-                                                                      FROM fda_inspections""").fetchall():
+        for iid, fei, firm, street, cty, st, z, ctry, area in cur.execute("""SELECT inspection_id, fei, firm, address, city, state, zip, country,
+                                                                            project_area FROM fda_inspections""").fetchall():
             india = bool(re.search(r"india", ctry or "", re.I))
             mk = mk_from(firm)
-            if PERSON.search(firm or "") or not (india or mk in makers):
-                continue           # clinical investigators are people, not plants; abroad only for firms already known as makers
-            addr =(f"{street or ''}, {cty or ''}, {st or ''} {z or ''}, India" if india
+            if not mk or PERSON.search(firm or "") or (re.search(r"bioresearch", area or "", re.I) and mk not in makers):
+                continue           # clinical investigators, hospitals and CROs (BIMO) are not plants, unless the firm is a known maker
+            if india:              # FDA gives Indian firms no PIN; the street's numbers are survey / plot numbers, never a PIN
+                street = re.sub(r"\d", " ", street or "")
+            addr = (f"{street}, {cty or ''}, {st or ''} {z or ''}, India" if india
                     else f"{street or ''}, {cty or ''}, {st or ''}, {ctry or ''}-{z or ''}")
             recs.append(("fda_inspections", str(iid), mk, addr, "us_fda_inspection", "India" if india else (ctry or "")))
             fei_of[("fda_inspections", str(iid))] = fei
@@ -167,6 +169,7 @@ def run() -> dict:
     site_of: dict[tuple, str] = {}
     info: dict[str, dict] = {}
     pending = []
+    recs.sort(key=lambda r: r[0] == "fda_inspections")   # stable: inspections after the sources that define foreign sites
     for table, sk, mk, addr, role, country in recs:
         if not mk:
             continue
@@ -179,6 +182,8 @@ def run() -> dict:
             if m and table in ("reg_approvals", "fda_inspections"):
                 ctry = norm(m.group(1)).split()[-1] if norm(m.group(1)) else ""
                 key, kind, country = f"st:{mk[3:]}|{ctry}:{norm(m.group(2)).replace(' ', '')}", "foreign_postal", m.group(1).strip()
+                if table == "fda_inspections" and key not in info:
+                    key = None     # abroad, inspections only join a site our India-facing sources already list (US parents share names)
         else:
             p = pin_of(addr)
             if p:
