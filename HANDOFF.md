@@ -44,7 +44,7 @@ Last updated 2026-10-17. All work is committed in git at `D:\pharmacopy\pharmale
 - **News:** `news_archive` backfills GDELT month by month from 2017, about 12 h at its rate limit, every 2 h at :25.
 - **Catalog:** 149 molecule spelling variants merged (5,155 → 5,006). `build_core` now keeps `product_info` (set `PHARMALENS_REBUILD_INFO=1` to regenerate); a rebuild takes ~1 min with no memory peak.
 - **Tools:** `deploy/deploy.sh` (code), `deploy/rebuild.sh` (catalog rebuild cycle against the server database; server stopped meanwhile; old database kept as `.pre-rebuild`), `deploy/relay.ps1` (home relay + weekly backup pull to `D:\pharmacopyackups`). SSH via Tailscale: `ssh -i ~/.ssh/azure_srv azureuser@srv1`.
-- **Waiting on the user:** enable the relay task (one PowerShell command, see the final report); a Telegram bot token for failure alerts.
+- **Relay task:** Windows task "PharmaLens relay" installed 2026-11-06 (daily 09:30, at logon, catches up on missed runs); runs `deploy/relay.ps1`, logs to `D:pharmacopy	mpelay.log`. The laptop must be on and on Tailscale at least once in 8 days or the UP blacklist feed fails (health alert at 6 days).
 
 ## DrugSetu replacement (agreed 2026-10-27, both items required)
 DrugSetu's 7-day trial is over and a new account would also cap out (~500 queries), so it is a dead end. **Keep its
