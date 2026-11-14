@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { csvUrl, day, get, num, type Row } from "../lib/api";
-import { Bar, ErrorBox, Kpi, Loading, Pager, Panel, Tabs } from "../components/ui";
+import { Bar, ErrorBox, Kpi, Loading, Pager, Panel, Tabs, Csv } from "../components/ui";
 
 type Tab = "sec" | "approvals" | "trials" | "brands";
 
@@ -78,7 +78,7 @@ function SecTab({ committees }: { committees: Row[] }) {
   const reset = () => setPage(1);
   return (
     <Panel title="Subject Expert Committee recommendations" sub="every agenda item: who asked CDSCO for what, and what the committee said"
-      right={<a href={csvUrl("/pipeline/sec", { q, division, outcome, committee })}>CSV ⤓</a>}>
+      right={<Csv href={csvUrl("/pipeline/sec", { q, division, outcome, committee })} />}>
       <div className="filterbar inline">
         <input placeholder="drug or firm" value={q} onChange={(e) => { setQ(e.target.value); reset(); }} />
         <select value={division} onChange={(e) => { setDivision(e.target.value); reset(); }}>
@@ -124,7 +124,7 @@ function ApprovalsTab({ year }: { year: string }) {
   const params = { q, year, page, limit: 60 };
   const r = useQuery({ queryKey: ["approvals", params], queryFn: () => get("/pipeline/approvals", params) });
   return (
-    <Panel title="New drugs approved by CDSCO" sub={year ? `year ${year}` : "all years since 2015"} right={<a href={csvUrl("/pipeline/approvals", { q, year })}>CSV ⤓</a>}>
+    <Panel title="New drugs approved by CDSCO" sub={year ? `year ${year}` : "all years since 2015"} right={<Csv href={csvUrl("/pipeline/approvals", { q, year })} />}>
       <div className="filterbar inline"><input placeholder="drug or indication" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></div>
       {r.isLoading ? <Loading /> : (
         <table className="tt">
@@ -155,7 +155,7 @@ function BrandsTab() {
   const since = r.data?.tracking?.find((t: Row) => t.source === "cdsco_84ab")?.since;
   return (
     <Panel title="New brand registrations" sub={`brands that newly appear in the CDSCO Rule 84AB registry (checked weekly${since ? `, tracked since ${day(since)}` : ""}) and in CDCI, the national drug terminology — registrations, not proof of launch; export brands appear too`}
-      right={<a href={csvUrl("/pipeline/new-brands", { q, source, days })}>CSV ⤓</a>}>
+      right={<Csv href={csvUrl("/pipeline/new-brands", { q, source, days })} />}>
       <div className="filterbar inline">
         <input placeholder="brand, company or generic" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         <select value={source} onChange={(e) => { setSource(e.target.value); setPage(1); }}>
@@ -192,7 +192,7 @@ function TrialsTab() {
   const r = useQuery({ queryKey: ["trials", params], queryFn: () => get("/pipeline/trials", params) });
   return (
     <Panel title="Interventional trials with Indian sites" sub="ClinicalTrials.gov (CTRI is CAPTCHA-gated; CTRI ids shown where cross-registered)"
-      right={<a href={csvUrl("/pipeline/trials", params)}>CSV ⤓</a>}>
+      right={<Csv href={csvUrl("/pipeline/trials", params)} />}>
       <div className="filterbar inline">
         <input placeholder="drug, condition or sponsor" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>

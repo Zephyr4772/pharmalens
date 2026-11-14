@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { csvUrl, day, get, inr, num, type Row } from "../lib/api";
-import { Bar, Empty, ErrorBox, Kpi, Loading, Pager, Panel, Tabs } from "../components/ui";
+import { Bar, Empty, ErrorBox, Kpi, Loading, Pager, Panel, Tabs, Csv } from "../components/ui";
 import { NppaTable } from "../components/Depth";
 
 type Tab = "nsq" | "bans" | "docs" | "usfda" | "ja" | "ceiling" | "launch" | "nlem" | "shortage";
@@ -71,7 +71,7 @@ function NsqTab({ month, offenders }: { month?: string; offenders: Row[] }) {
   return (
     <div className="grid cols-4">
       <Panel title="Batch ledger" sub={month ? `month ${month}` : "all months"} className="span-3"
-        right={<a href={csvUrl("/reg/nsq", { q, batch, category: cat, month })}>CSV ⤓</a>}>
+        right={<Csv href={csvUrl("/reg/nsq", { q, batch, category: cat, month })} />}>
         <div className="filterbar inline">
           <input placeholder="product / manufacturer" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
           <input placeholder="exact batch no." value={batch} onChange={(e) => { setBatch(e.target.value); setPage(1); }} />
@@ -117,7 +117,7 @@ function BansTab() {
   return (
     <div className="grid cols-2">
       <Panel title="Prohibited & restricted FDCs" sub="Section 26A, Drugs & Cosmetics Act — every notification since 1983"
-        right={<a href={csvUrl("/reg/bans", { q })}>CSV ⤓</a>}>
+        right={<Csv href={csvUrl("/reg/bans", { q })} />}>
         <div className="filterbar inline"><input placeholder="search combination" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} /></div>
         <table className="tt">
           <thead><tr><th>Combination</th><th>Notification</th><th>Date</th><th>Status</th><th className="num">SKUs hit</th><th className="num">Check</th></tr></thead>
@@ -244,7 +244,7 @@ function LaunchPriceTab() {
   const r = useQuery({ queryKey: ["nppa-retail", q, kind, page], queryFn: () => get("/reg/nppa-retail", { q, kind, page, limit: 80 }) });
   return (
     <Panel title="NPPA launch prices — new drugs" sub="official retail price per unit NPPA fixes before a new drug is sold (Gazette S.O., since 2019), excluding GST"
-      right={<a href={csvUrl("/reg/nppa-retail", { q, kind })}>CSV ⤓</a>}>
+      right={<Csv href={csvUrl("/reg/nppa-retail", { q, kind })} />}>
       <div className="filterbar inline">
         <input placeholder="formulation or company" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
         <select value={kind} onChange={(e) => { setKind(e.target.value); setPage(1); }}>

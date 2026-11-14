@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { csvUrl, get, inr, num, type Row } from "../lib/api";
-import { ErrorBox, Loading, Pager, Panel, Star } from "../components/ui";
+import { ErrorBox, Loading, Pager, Panel, Star, Csv } from "../components/ui";
 
 export function ProductTable({ rows, showCompany = true }: { rows: Row[]; showCompany?: boolean }) {
   const nav = useNavigate();
@@ -80,7 +80,7 @@ export default function Screener() {
           <option value="unit_asc">₹/unit ↑</option><option value="unit_desc">₹/unit ↓</option><option value="name">name</option>
         </select>
         <span className="spacer" />
-        <a href={csvUrl("/products", f)}>CSV ⤓</a>
+        <Csv href={csvUrl("/products", f)} />
       </div>
       <Panel title="Product screener" sub={r.data ? `${num(r.data.meta.total)} SKUs · ${r.data.took_ms}ms` : ""}>
         {r.isLoading ? <Loading /> : r.error ? <ErrorBox e={r.error} /> : <ProductTable rows={r.data.data} />}

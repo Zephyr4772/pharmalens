@@ -28,6 +28,62 @@ def build():
     return dict(db.cursor().execute("SELECT key, value FROM build_meta").fetchall())
 
 
+# The "How it works" page: what the feeds have collected, how reliably they run, and how the jobs are grouped.
+AREAS = {
+    "Indian regulators": ["cdsco_nsq_portal", "cdsco_nsq", "nsq_mirror", "banned_fdc", "cdsco_gazette", "cdsco_alerts", "cdsco_approvals",
+                          "cdsco_approvals_db", "cdsco_sec", "cdsco_brands", "pvpi_alerts", "nlem", "cdci"],
+    "Prices": ["nppa_orders", "nppa_retail_prices", "nppa_compendium", "nppa_history", "mfr_price_lists", "jan_aushadhi"],
+    "State procurement": ["rmscl_rates", "tnmsc_rates", "hmscl_rates", "upmscl_debarments"],
+    "Markets": ["nse_quotes", "nse_filings", "nse_results", "nse_fundamentals", "nse_history"],
+    "News": ["pharma_news", "news_archive"],
+    "US and global": ["fda_inspections", "fda_compliance", "fda_ia_6640", "openfda_recalls", "openfda_bulk", "ctgov_india", "who_pq",
+                      "ema_medicines", "who_alerts", "molecule_enrichment"],
+    "Internal jobs": ["entity_linker", "name_index", "parent_sync", "alerts_dispatch", "health_watch", "bot_briefing", "results_preview",
+                      "results_summary", "weekly_digest"],
+}
+SHOW_COUNTS = ["products", "molecules", "combos", "companies", "parents", "makers", "sites", "entity_links", "reg_nsq", "reg_approvals",
+               "reg_banned_fdc", "sec_items", "brand_registry", "cdci_brand", "price_observations", "mfr_prices", "nppa_retail_prices",
+               "nppa_ceiling", "procurement_rates", "fda_inspections", "fda_citations", "fda_compliance_actions", "fda_import_refusals",
+               "usfda_actions", "us_applications", "us_orange_book", "us_ndc", "us_patents", "ema_medicines", "who_pq", "trials",
+               "quote_history", "corp_announcements", "fin_results", "news", "events"]
+SHOW_RANGES = {"reg_nsq": "alert_month", "reg_approvals": "approved_on", "price_observations": "observed_on", "fda_inspections": "end_date",
+               "fda_compliance_actions": "action_date", "fda_import_refusals": "refusal_date", "quote_history": "d", "news": "published_at",
+               "corp_announcements": "announced_at", "nppa_retail_prices": "notified_on"}
+_showcase: dict[str, tuple[float, dict]] = {}
+
+
+@router.get("/meta/showcase")
+def showcase():
+    hit = _showcase.get("v")
+    if hit and time.time() - hit[0] < 600:
+        return hit[1]
+    from collections import Counter
+
+    from ... import licensing
+    cur = db.cursor()
+    counts, ranges = {}, {}
+    for t in SHOW_COUNTS:
+        try:
+            counts[t] = cur.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+        except Exception:  # noqa: BLE001 — a feed not loaded yet
+            counts[t] = None
+    for t, col in SHOW_RANGES.items():
+        try:
+            ranges[t] = [str(v)[:10] if v is not None else None for v in cur.execute(f"SELECT min({col}), max({col}) FROM {t}").fetchone()]
+        except Exception:  # noqa: BLE001
+            pass
+    runs = {c: {"runs": n, "ok": ok} for c, n, ok in cur.execute(
+        "SELECT connector, count(*), count(*) FILTER (WHERE status = 'ok') FROM connector_runs WHERE started_at > now() - INTERVAL 14 DAY GROUP BY 1").fetchall()}
+    try:
+        high = cur.execute("SELECT count(*) FROM entity_links WHERE confidence >= 0.85").fetchone()[0]
+    except Exception:  # noqa: BLE001
+        high = None
+    out = {"counts": counts, "ranges": ranges, "runs14": runs, "areas": AREAS, "links_high": high,
+           "licence_mix": dict(Counter(licensing.table_class(t) for t in licensing.TABLES)), "asof": datetime.now().isoformat(timespec="seconds")}
+    _showcase["v"] = (time.time(), out)
+    return out
+
+
 @router.get("/meta/feeds")
 def feeds():
     cur = db.cursor()

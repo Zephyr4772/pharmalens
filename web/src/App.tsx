@@ -32,6 +32,9 @@ import Feeds from "./screens/Feeds";
 import Watchlist from "./screens/Watchlist";
 import Pipeline from "./screens/Pipeline";
 import Alerts from "./screens/Alerts";
+import About from "./screens/About";
+import { Link } from "react-router-dom";
+import { useMe } from "./state/me";
 
 const qc = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 60_000 } },
@@ -53,6 +56,17 @@ function GlobalKeys() {
   return null;
 }
 
+// Shown to visitors who reach the terminal from outside the private network.
+function PublicBanner() {
+  const me = useMe();
+  if (!me.public) return null;
+  return (
+    <div className="public-banner">
+      Public view · read-only · the data stays on the server · <Link to="/about">How this works →</Link>
+    </div>
+  );
+}
+
 function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   useEffect(() => {
@@ -72,6 +86,7 @@ function Shell() {
     <div className="shell">
       <GlobalKeys />
       <TopBar onOpenPalette={() => setPaletteOpen(true)} />
+      <PublicBanner />
       <TickerTape />
       <div className="shell-body">
         <NavRail />
@@ -99,6 +114,7 @@ function Shell() {
             <Route path="/watch" element={<Watchlist />} />
             <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/alerts" element={<Alerts />} />
+            <Route path="/about" element={<About />} />
             <Route path="*" element={<Today />} />
           </Routes>
         </main>

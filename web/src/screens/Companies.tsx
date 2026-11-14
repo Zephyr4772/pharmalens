@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { crore, csvUrl, day, get, pct, signed, type Row } from "../lib/api";
 import { useWatchlist } from "../state/watchlist";
-import { ErrorBox, Kpi, Loading, Panel, Star, useSort } from "../components/ui";
+import { ErrorBox, Kpi, Loading, Panel, Star, useSort, Csv } from "../components/ui";
 
 // Public-record red flags (same thresholds as Specs' /sanity); hover a badge for the reason.
 export function Flags({ f }: { f: Row[] }) {
@@ -54,7 +54,7 @@ export default function Companies() {
         <Kpi label="Reporting ≤7 days" value={all.filter(FILTERS[2][2] as (r: Row) => boolean).length} />
       </div>
       <Panel title="Companies" sub="listed Indian pharma groups · click a row for the dossier · hover a flag for the reason"
-        right={<a href={csvUrl("/invest/companies")}>CSV ↓</a>}>
+        right={<Csv href={csvUrl("/invest/companies")} label="CSV ↓" />}>
         <div className="chips" style={{ marginBottom: 8, alignItems: "center" }}>
           <input placeholder="filter by name or ticker" value={text} onChange={(e) => setText(e.target.value)} style={{ marginRight: 8, minWidth: 200 }} />
           {FILTERS.map(([k, label]) => (

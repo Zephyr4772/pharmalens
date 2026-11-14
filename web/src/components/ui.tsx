@@ -2,6 +2,7 @@ import { ReactNode, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { SEV_CLASS, ago, type Row } from "../lib/api";
 import { useWatchlist } from "../state/watchlist";
+import { useMe } from "../state/me";
 
 export function Panel({ title, sub, right, children, className = "", bodyClass = "", style }: {
   title: ReactNode; sub?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; bodyClass?: string; style?: React.CSSProperties;
@@ -169,4 +170,10 @@ export function useSort<T extends Row>(rows: T[] | undefined, initial: string, d
     </th>
   );
   return { sorted, th };
+}
+
+// CSV download link; exports are off in the public view, so visitors do not see it.
+export function Csv({ href, label = "CSV ⤓" }: { href: string; label?: string }) {
+  const me = useMe();
+  return me.loaded && !me.public ? <a href={href}>{label}</a> : null;
 }

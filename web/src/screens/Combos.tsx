@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { csvUrl, get, inr, num, share, type Row } from "../lib/api";
-import { Loading, Pager, Panel, Star, Tabs } from "../components/ui";
+import { Loading, Pager, Panel, Star, Tabs, Csv } from "../components/ui";
 
 type Mode = "spreads" | "browse" | "banned";
 
@@ -35,7 +35,7 @@ export default function Combos() {
             <option value="brands">brands</option><option value="companies">marketers</option><option value="spread">price spread</option><option value="median">median MRP</option>
           </select></>}
         <span className="spacer" />
-        {mode === "spreads" && <a href={csvUrl("/market/spreads", { therapeutic_class: cls, limit: 500 })}>CSV ⤓</a>}
+        {mode === "spreads" && <Csv href={csvUrl("/market/spreads", { therapeutic_class: cls, limit: 500 })} />}
       </div>
       {mode === "spreads" ? (
         <Panel title="Same salt, same strength — price spread" sub="same molecules, strengths and dosage form; per-unit prices, outliers excluded; ranked by brands × log(max/min) — the procurement opportunity list">

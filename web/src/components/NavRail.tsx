@@ -18,6 +18,7 @@ export const NAV = [
   { key: "f", name: "FEED", path: "/feeds", title: "Data feeds & methodology" },
   { key: "w", name: "WATCH", path: "/watch", title: "Watchlist" },
   { key: "a", name: "ALERT", path: "/alerts", title: "Alert subscriptions & inbox" },
+  { key: "i", name: "ABOUT", path: "/about", title: "How PharmaLens works: feeds, timed jobs, data depth" },
 ];
 
 export function NavRail() {

@@ -464,3 +464,6 @@ ul.tips li { margin-bottom: 3px; }
 button.chip { background: none; cursor: pointer; font: inherit; color: var(--dim); }
 .chip-on { color: var(--amber) !important; border-color: var(--amber) !important; }
 .label-text { margin-top: 8px; max-height: 260px; overflow: auto; white-space: pre-wrap; line-height: 1.45; color: var(--text); font-size: 12px; }
+
+.public-banner { background: var(--panel-head); border-bottom: 1px solid var(--line-2); color: var(--dim); font-size: 11px; padding: 4px 12px; text-align: center; }
+.public-banner a { color: var(--amber); text-decoration: none; }

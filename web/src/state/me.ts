@@ -6,8 +6,8 @@ import { get } from "../lib/api";
 export function useMe() {
   const q = useQuery({
     queryKey: ["me"],
-    queryFn: () => get<{ login: string | null; name: string | null; owner: boolean }>("/me"),
+    queryFn: () => get<{ login: string | null; name: string | null; owner: boolean; public?: boolean }>("/me"),
     staleTime: Infinity,
   });
-  return { owner: q.data?.owner ?? false, name: q.data?.name ?? q.data?.login ?? null, loaded: q.isSuccess };
+  return { owner: q.data?.owner ?? false, public: q.data?.public ?? false, name: q.data?.name ?? q.data?.login ?? null, loaded: q.isSuccess };
 }
