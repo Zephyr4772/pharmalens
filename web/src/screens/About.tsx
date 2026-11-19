@@ -114,7 +114,7 @@ export default function About() {
 
       <div className="kpis">
         <Kpi label="Fetchers" value={external} sub={`+ ${Object.keys(feeds).length - external} internal jobs`} tone="amber" />
-        <Kpi label="Runs, last 14 days" value={num(total)} sub={total ? `${((ok / total) * 100).toFixed(1)}% succeeded` : ""} tone="up" />
+        <Kpi label="Runs, last 14 days" value={num(total)} sub={total ? `${((ok / total) * 100).toFixed(ok === total ? 0 : 2)}% succeeded (${num(total - ok)} failed)` : ""} tone="up" />
         <Kpi label="Catalog SKUs" value={num(c.products)} sub={`${num(c.molecules)} molecules`} />
         <Kpi label="Entity links" value={num(c.entity_links)} sub={s.links_high ? `${num(s.links_high)} high confidence` : ""} />
         <Kpi label="Manufacturing sites" value={num(c.sites)} sub={`${num(c.makers)} manufacturers`} />
