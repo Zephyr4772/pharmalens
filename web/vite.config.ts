@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    proxy: { "/api": "http://localhost:8010" },
+    // API_TARGET=https://srv1.tailf3b6bc.ts.net previews the UI against the live server (over Tailscale)
+    proxy: { "/api": { target: process.env.API_TARGET ?? "http://localhost:8010", changeOrigin: true } },
   },
 });
