@@ -4,6 +4,22 @@ A real-time intelligence terminal for the Indian pharmaceutical market, built fo
 NGOs and procurement teams, pharma companies sizing up the market, and analysts. It is not
 a consumer app and does no symptom or disease prediction.
 
+**Live, read-only:** [srv1.tailf3b6bc.ts.net/about](https://srv1.tailf3b6bc.ts.net/about) explains how it works, with
+numbers read from the running server: 40 timed fetchers, 9 internal jobs, the daily schedule, run reliability and
+what has been collected. The rest of the terminal can be browsed from there. The data itself stays on the server:
+the public view has no exports and no API.
+
+- **Sources:** Indian regulators (CDSCO, NPPA, PvPI), state procurement agencies, NSE, news wires, and the US FDA
+  (openFDA and the Data Dashboard: inspections, Form 483s, warning letters, import refusals). Schedules are in
+  `backend/pharmalens/connectors`; see [docs/data-brief.md](docs/data-brief.md) for the full list.
+- **Linking:** free-text records are resolved to molecules, manufacturers, plants and corporate groups, and each link
+  stores its method, confidence, evidence and licence class (`backend/pharmalens/linking`). Precision samples for the
+  US FDA linker are in [docs/link-samples](docs/link-samples).
+- **Stack:** Python (FastAPI, APScheduler, DuckDB), React and TypeScript, Docker on a small Azure VM, private over
+  Tailscale with a public read-only view through Tailscale Funnel.
+- **Licences:** [docs/LICENSING.md](docs/LICENSING.md) records the terms of every source; this is why the code is
+  public and the data is not.
+
 | Screen | Key | What it answers |
 |---|---|---|
 | MKT | 1 | What changed today: bans, NSQ batches, recalls, price notices, stock moves, news, segment structure |

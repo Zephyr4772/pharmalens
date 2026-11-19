@@ -9,3 +9,9 @@ web/dist/
 .venv/
 
 /data/derived/
+
+# kept out of the public repo: server details, and samples quoting permission/internal-class records (LICENSING.md)
+deploy/*.private.md
+docs/molecule-aliases-review.csv
+docs/link-samples/*
+!docs/link-samples/fda-*.md
